@@ -35,6 +35,7 @@
  */
 
 #include <OGF/gom/reflection/meta.h>
+#include <OGF/gom/types/gom_implementation.h>
 
 //___________________________________________________
 
@@ -49,10 +50,10 @@ namespace OGF {
 	// First delete all the ArgLists stored in the Meta information,
 	// because deleting Any requires to access the LifeCycle objects
 	// that are stored in the Meta information (do not saw the branch...)
-	for(auto& it : type_name_to_meta_type_) {
+	// Now we are good to go !
+        for(auto& it : type_name_to_meta_type_) {
 	    it.second->pre_delete();
 	}
-	// Now we are good to go !
         type_name_to_meta_type_.clear() ;
         typeid_name_to_meta_type_.clear() ;
     }
@@ -110,9 +111,9 @@ namespace OGF {
             type_name_to_meta_type_[meta_type->name()] =
                 typeid_name_to_meta_type_[typeid_name];
         } else {
-            type_name_to_meta_type_[meta_type->name()]   = meta_type ;
-            typeid_name_to_meta_type_[typeid_name]       = meta_type ;
-            meta_type->set_typeid_name(typeid_name) ;
+            type_name_to_meta_type_[meta_type->name()] = meta_type ;
+            typeid_name_to_meta_type_[typeid_name] = meta_type ;
+            meta_type->set_typeid_name(typeid_name);
         }
         return true ;
     }
@@ -170,7 +171,14 @@ namespace OGF {
     void Meta::list_types(std::vector<MetaType*>& types) {
         types.clear() ;
         for(auto& it : type_name_to_meta_type_) {
-            types.push_back(it.second) ;
+            types.push_back(it.second);
+        }
+    }
+
+    void Meta::list_type_names(std::vector<std::string>& type_names) {
+        type_names.clear() ;
+        for(auto& it : type_name_to_meta_type_) {
+            type_names.push_back(it.first);
         }
     }
 }

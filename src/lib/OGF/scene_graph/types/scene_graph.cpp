@@ -65,7 +65,10 @@ namespace OGF {
 
     SceneGraph::SceneGraph(Interpreter* interpreter) :
 	CompositeGrob(nullptr),
-	interpreter_(interpreter),
+	interpreter_(
+            interpreter != nullptr ? interpreter :
+            Interpreter::default_interpreter()
+        ),
 	render_area_(nullptr),
 	application_(nullptr),
 	scene_graph_shader_manager_(nullptr)
@@ -95,8 +98,7 @@ namespace OGF {
 	}
     }
 
-    SceneGraphShaderManager* SceneGraph::get_scene_graph_shader_manager(
-    ) const {
+    SceneGraphShaderManager* SceneGraph::get_scene_graph_shader_manager() const {
 	return scene_graph_shader_manager_;
     }
     
@@ -107,6 +109,14 @@ namespace OGF {
         }
     }
 
+    void SceneGraph::register_grob_commands(
+        MetaClass* grob_class, MetaClass* commands_class
+    ) {
+        SceneGraphLibrary::instance()->register_grob_commands(
+            grob_class->name(), commands_class->name()
+        );
+    }
+    
     void SceneGraph::set_visibilities(const std::string& x) {
         std::vector< std::string > values;
         String::split_string( x, ';', values );
@@ -182,7 +192,7 @@ namespace OGF {
 		copy_property_to_arglist("camera.auto_focus",args);
 		copy_property_to_arglist("camera.draw_selected_only",args);
 		copy_property_to_arglist("camera.clipping",args);
-		copy_property_to_arglist("camera.lighting_matrix",args);		
+		copy_property_to_arglist("camera.lighting_matrix",args);
 		
 		copy_property_to_arglist("xform.u", args);
 		copy_property_to_arglist("xform.v", args);
@@ -251,6 +261,40 @@ namespace OGF {
 	return dupl;
     }
 
+    void SceneGraph::move_current_up() {
+        if(current() == nullptr) {
+            return;
+        }
+        Grob* prev = nullptr;
+        for(index_t i=0; i+1<get_nb_children(); ++i) {
+            if(ith_child(i+1) == current()) {
+                prev = ith_child(i);
+                break;
+            }
+        }
+        if(prev == nullptr) {
+            return;
+        }
+        swap_children(prev, current());
+    }
+
+    void SceneGraph::move_current_down() {
+        if(current() == nullptr) {
+            return;
+        }
+        Grob* next = nullptr;
+        for(index_t i=0; i+1<get_nb_children(); ++i) {
+            if(ith_child(i) == current()) {
+                next = ith_child(i+1);
+                break;
+            }
+        }
+        if(next == nullptr) {
+            return;
+        }
+        swap_children(next, current());
+    }
+    
     void SceneGraph::delete_current_object() {
         Grob* cur = resolve(current_object_);
         set_current_object(std::string(),false);
@@ -313,7 +357,8 @@ namespace OGF {
     }
 
     Grob* SceneGraph::load_object(
-        const FileName& file_name_in, const std::string& type
+        const FileName& file_name_in, const std::string& type,
+        bool invoked_from_gui
     ) {
                 
         std::string file_name = file_name_in;
@@ -380,7 +425,8 @@ namespace OGF {
             
             result = create_object(class_names[i]);
             enable_signals();
-	    //   Commented-out, causes problems under Ubuntu: triggers a GUI draw from
+	    //   Commented-out, causes problems under Ubuntu:
+            // triggers a GUI draw from
 	    // a GUI draw (to be investigated...)
             // Logger::status() << "Loading object:" << base_name << std::endl;
             result->rename(base_name);
@@ -406,16 +452,24 @@ namespace OGF {
             interpreter()->add_to_history(out.str());
         }
 
+        if(invoked_from_gui) {
+            const std::string dir = FileSystem::dir_name(file_name);
+            if( FileSystem::is_directory(dir) ) {
+                FileSystem::set_current_working_directory(dir);
+            }
+        }
+        
         return result;
     }
 
     void SceneGraph::load_objects(
-        const std::string& file_names_str, const std::string& type
+        const std::string& file_names_str, const std::string& type,
+        bool invoked_from_gui
     ) {
         std::vector<std::string> file_names;
         String::split_string(file_names_str, ';', file_names);
         for(unsigned int i=0; i<file_names.size(); i++) {
-            load_object(file_names[i],type);
+            load_object(file_names[i],type,invoked_from_gui);
         }
     }
 
@@ -447,7 +501,9 @@ namespace OGF {
 	return true;
     }
 
-    Grob* SceneGraph::create_object(const GrobClassName& class_name_in, const std::string& name) {
+    Grob* SceneGraph::create_object(
+        const GrobClassName& class_name_in, const std::string& name
+    ) {
 	std::string class_name = class_name_in;
         if(class_name == "OGF::SceneGraph") {
             Logger::err("SceneGraph")
@@ -471,8 +527,9 @@ namespace OGF {
 
 	
         if(mclass == nullptr) {
-            Logger::err("SceneGraph") << class_name_in << ": no such object class"
-                                      << std::endl;
+            Logger::err("SceneGraph")
+                << class_name_in << ": no such object class"
+                << std::endl;
             return nullptr;
         }
         
@@ -604,9 +661,7 @@ namespace OGF {
         return true;
     }
 
-    bool SceneGraph::save_viewer_properties(
-	const std::string& filename
-    ) {
+    bool SceneGraph::save_viewer_properties(const std::string& filename) {
 	bool result = true;
 	try {
 	    OutputGraphiteFile out(filename);

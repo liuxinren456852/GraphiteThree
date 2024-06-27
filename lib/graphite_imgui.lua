@@ -70,6 +70,16 @@ function graphite_gui.draw_menu_bar()
          scene_graph_gui.scene_graph_menu(false)
 	 imgui.EndMenu()
       end
+
+      -- draw SceneGraphCommands that have a /menubar/... menu
+      local node = scene_graph_gui.menu_map.get(scene_graph)
+      node = node.by_name['menubar']
+      if node ~= nil then
+         scene_graph_gui.menu_map.draw(
+            scene_graph, node
+         )
+      end
+
       if scene_graph.current() ~= nil then
           scene_graph_gui.grob_ops(
 	     scene_graph.current(), true
@@ -85,11 +95,27 @@ end
 graphite_gui.frame = 0
 
 -- \brief The function that handles the GUI
+graphite_gui.lock = false
 function graphite_gui.draw()
+    if graphite_gui.lock then
+       return
+    end
+    graphite_gui.lock = true
+    
     if not graphite_gui.presentation_mode() then
        graphite_gui.draw_menu_bar()
+       
+       if main.tooltip ~= '' then
+          if imgui.BeginTooltip() then
+             imgui.Text(main.tooltip)
+             imgui.EndTooltip()
+          end
+       end
+
        main.draw_dock_space()
     end
+
+
     graphite_main_window.draw()
     autogui.command_dialogs()
 
@@ -101,6 +127,7 @@ function graphite_gui.draw()
     if graphite_gui.frame % 50 == 0 then
          collectgarbage()
     end
+    graphite_gui.lock = false
 end    
 
 gom.connect(main.redraw_request, graphite_gui.draw)

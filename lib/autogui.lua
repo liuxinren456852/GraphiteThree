@@ -427,7 +427,7 @@ autogui.handlers['OGF::PointStyle'] = autogui.bool_color_int
 autogui.colormaps = {
   {'french', false},
   {'black_white', false},
-  {'viridis', false},
+  {'viridis', true},
   {'rainbow', false},
   {'turbo', false},  
   {'cei_60757', false},
@@ -440,7 +440,10 @@ autogui.colormaps = {
   {'random', false},
   {'blue_red', false},
   {'blue_white', false},
-  {'transparent', false}
+  {'black-blue-white', false},
+  {'transparent', false},
+  {'grayscale', true},
+  {'misc', false}
 }
 
 -- \brief Edits a colormap name
@@ -453,6 +456,7 @@ function autogui.colormap(label,oldval)
    local sel=false
    local newval=oldval
    if imgui.ImageButton(
+       label..'_choose_colormap',
        main.resolve_icon('colormaps/'..oldval),
        100.0*main.scaling(),
        10.0*main.scaling()
@@ -462,6 +466,7 @@ function autogui.colormap(label,oldval)
    if imgui.BeginPopup(label) then
       for i=1,#autogui.colormaps do
          if imgui.ImageButton(
+	    label..'_'..autogui.colormaps[i][1],
 	    main.resolve_icon('colormaps/'..autogui.colormaps[i][1]),
 	    80.0*main.scaling(),
 	    8.0*main.scaling()
@@ -565,6 +570,28 @@ autogui.handlers['OGF::FullScreenEffectName'] = function(
    autogui.combo_box(object, property_name, values, tooltip)
 end
 
+-- \brief Handler for OGF::GrobName
+-- \param[in] object, property_name, menum, tooltip handler parameters
+-- \see autogui.handlers
+
+autogui.handlers['OGF::GrobName'] = function(
+   object, property_name, mtype, tooltip
+)
+   local values = gom.get_environment_value('grob_instances')
+   autogui.combo_box(object, property_name, values, tooltip)
+end
+
+-- \brief Handler for OGF::NewGrobName
+-- \param[in] object, property_name, menum, tooltip handler parameters
+-- \see autogui.handlers
+
+autogui.handlers['OGF::NewGrobName'] = function(
+   object, property_name, mtype, tooltip
+)
+   local values = gom.get_environment_value('grob_instances')
+   autogui.editable_combo_box(object, property_name, values, tooltip)
+end
+
 
 -- \brief Handler for OGF::MeshGrobName
 -- \param[in] object, property_name, menum, tooltip handler parameters
@@ -653,13 +680,23 @@ autogui.handlers.combo_box = function(
       end
    end
 
-   -- evaluate 'values' using object as context
-   -- (Lua is so cool !)
-   local values = load(
-        'return '..values_custom_attribute,
-	'gom_attribute: values','bt',
-	object
-   )()
+   local values = values_custom_attribute
+
+   -- if values start with a '$' sign, execute the content
+   -- with object as the context to get the actual list of
+   -- values (used for instance to generate list of attributes
+   -- from "$grob.attributes")
+   if values:sub(1,1) == '$' then
+     values = values:sub(2,values:len())
+     -- evaluate 'values' using object as context
+     -- (Lua is so cool !)
+     values = load(
+        'return '..values,       -- code to be evaluated
+	'gom_attribute: values', -- tag for error messages
+        'bt',                    -- both binary and text
+	object                   -- environment
+     )()
+   end
    
    autogui.combo_box(object, property_name, values, tooltip)
 end
@@ -930,6 +967,10 @@ function autogui.args_to_string(mmethod,args)
          result = result .. name .. '=' .. value 
       end
    end
+   if #result > 1 then
+       result = result .. ','
+   end
+   result = result .. '_invoked_from_gui=true'
    result = result .. '}'
    return result
 end
@@ -1183,7 +1224,8 @@ function autogui.command_menu_item(object,mmethod,object_as_string)
           mmethod.name
       ) then
          main.exec_command(
-             object_as_string..'.'..mmethod.name..'()', false
+             object_as_string..'.'..mmethod.name..
+             '({_invoked_from_gui=true})', false
           )
       end
       autogui.tooltip(autogui.help(mmethod))
@@ -1408,17 +1450,31 @@ function autogui.properties_editor(object,called_from_inspect,no_windowify)
    autogui.properties_editor_properties(object)
    if is_shader then
       imgui.Separator()
+      imgui.Text(imgui.font_icon('sync-alt'))
+      imgui.SameLine()
       if imgui.Button(
-        imgui.font_icon('check')..      
-        "  Apply to all".."##ops##"..name,-1,autogui.icon_size()+6
+        imgui.font_icon('cubes')..
+        '##ops##'..name,
+        -imgui.GetContentRegionAvail()/2,autogui.icon_size()+6
       ) then
          local current_bkp = scene_graph.current_object
          scene_graph.current_object = name
          scene_graph.scene_graph_shader_manager.apply_to_scene_graph()
          scene_graph.current_object = current_bkp
       end
-      autogui.tooltip('Applies graphic attributes to all objects')      
-   end   
+      autogui.tooltip('Apply graphic attributes to all objects')      
+      imgui.SameLine()
+      if imgui.Button(
+         imgui.font_icon('eye')..
+         "##ops##"..name,-1,autogui.icon_size()+6
+      ) then
+         local current_bkp = scene_graph.current_object
+         scene_graph.current_object = name
+         scene_graph.scene_graph_shader_manager.apply_to_scene_graph(true)
+         scene_graph.current_object = current_bkp
+      end
+      autogui.tooltip('Apply graphic attributes to visible objects')      
+   end
    
    autogui.property_editor_state[k].width_,
    autogui.property_editor_state[k].height_ = imgui.GetWindowSize()

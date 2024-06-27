@@ -123,6 +123,28 @@ namespace OGF {
     
     Box3d MeshGrob::bbox() const {
         Box3d result;
+
+        // If there is a vertex filter, apply it.
+        Shader* shader = get_shader();
+        if(shader != nullptr) {
+            if(shader->has_property("vertices_filter")) {
+                std::string prop;
+                shader->get_property("vertices_filter", prop);
+                if(prop == "true") {
+                    Attribute<Numeric::uint8> filter;
+                    filter.bind_if_is_defined(this->vertices.attributes(),"filter");
+                    if(filter.is_bound()) {
+                        for(index_t v: vertices) {
+                            if(filter[v] != 0) {
+                                result.add_point(vec3(vertices.point_ptr(v)));
+                            }
+                        }
+                        return result;
+                    }
+                }
+            }
+        }
+        
         if(vertices.nb() != 0) {
             double xyzmin[3];
             double xyzmax[3];
@@ -130,6 +152,7 @@ namespace OGF {
             result.add_point(vec3(xyzmin));
             result.add_point(vec3(xyzmax));
         }
+        
         return result;
     }
     
@@ -145,7 +168,9 @@ namespace OGF {
             ogf_assert(result != nullptr);
             result->rename(name);
             sg->set_current_object(result->name());
-            sg->set_current_object(cur_grob_bkp);
+	    if(sg->is_bound(cur_grob_bkp)) { 
+		sg->set_current_object(cur_grob_bkp);
+	    }
         }
         return result;
     }
@@ -188,6 +213,46 @@ namespace OGF {
         return Mesh::get_scalar_attributes();
     }
 
+    std::string MeshGrob::get_selections() const {
+        std::string result = "";
+        static MeshElementsFlags elements[] = {
+            MESH_VERTICES, MESH_FACETS, MESH_CELLS
+        };
+        for(index_t i=0; i<sizeof(elements)/sizeof(MeshElementsFlags); ++i) {
+            if(
+                get_subelements_by_type(elements[i]).attributes().is_defined(
+                    "selection"
+                )
+            ) {
+                if(result != "") {
+                    result += ";";
+                }
+                result += subelements_type_to_name(elements[i]) + ".selection";
+            }
+        }
+        return result;
+    }
+
+    std::string MeshGrob::get_filters() const {
+        std::string result = "";
+        static MeshElementsFlags elements[] = {
+            MESH_VERTICES, MESH_FACETS, MESH_CELLS
+        };
+        for(index_t i=0; i<sizeof(elements)/sizeof(MeshElementsFlags); ++i) {
+            if(
+                get_subelements_by_type(elements[i]).attributes().is_defined(
+                    "filter"
+                )
+            ) {
+                if(result != "") {
+                    result += ";";
+                }
+                result += subelements_type_to_name(elements[i]) + ".filter";
+            }
+        }
+        return result;
+    }
+    
     bool MeshGrob::is_serializable() const {
         return true;
     }
@@ -200,6 +265,91 @@ namespace OGF {
     
     bool MeshGrob::serialize_write(OutputGraphiteFile& geofile) {
         return mesh_save(*this, geofile); 
+    }
+
+
+    std::string MeshGrob::list_attributes(
+        const std::string& localisations_in,
+        const std::string& types_in,
+        const std::string& dims_in
+    ) {
+        std::string all_attributes = get_attributes();
+        if(localisations_in == "" && types_in == "" && dims_in == "") {
+            return all_attributes;
+        }
+
+        std::vector<std::string> localisations;
+        String::split_string(localisations_in,';',localisations);
+
+        std::vector<std::string> types;
+        String::split_string(types_in,';',types);
+
+        std::vector<std::string> dims;
+        String::split_string(dims_in,';',dims);
+
+        
+        std::vector<std::string> attributes;
+        String::split_string(all_attributes,';',attributes);
+        std::string result;
+        for(const std::string& full_attribute_name: attributes) {
+            MeshElementsFlags where;
+            std::string attribute_name;
+            index_t component;
+            Mesh::parse_attribute_name(
+                full_attribute_name, where, attribute_name, component
+            );
+
+            MeshSubElementsStore& subelements = get_subelements_by_type(where);
+
+            AttributeStore* attribute_store =
+                subelements.attributes().find_attribute_store(attribute_name);
+
+            if(attribute_store == nullptr) {
+                std::cerr << "nil attr: " << full_attribute_name << std::endl;
+                continue;
+            }
+            
+            bool localisation_ok = (localisations_in == "");
+            for(const std::string& localisation: localisations) {
+                if(Mesh::subelements_type_to_name(where) == localisation) {
+                    localisation_ok = true;
+                    break;
+                }
+            }
+            
+            bool type_ok = (types_in == "");
+            for(const std::string& type: types) {
+                MetaType* mtype = Meta::instance()->resolve_meta_type(type);
+                if(mtype == nullptr) {
+                    std::cerr << "nil type: " << type << std::endl;
+                    continue;
+                }
+                if(
+                    attribute_store->elements_type_matches(mtype->typeid_name())
+                ) {
+                    type_ok = true;
+                    break;
+                }
+            }
+            
+            bool dim_ok = (dims_in == "");
+            for(const std::string& dim: dims) {
+                if(String::to_string(attribute_store->dimension()) == dim) {
+                    dim_ok = true;
+                    break;
+                }
+            }
+
+            if(localisation_ok && type_ok && dim_ok) {
+                if(result != "") {
+                    result += ";";
+                }
+                result += full_attribute_name;
+            }
+            
+        }
+
+        return result;
     }
     
 }

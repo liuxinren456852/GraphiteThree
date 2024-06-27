@@ -43,6 +43,7 @@
 #include <OGF/mesh/common/common.h>
 #include <OGF/mesh/commands/mesh_grob_commands.h>
 #include <geogram/parameterization/mesh_atlas_maker.h>
+#include <geogram/parameterization/mesh_segmentation.h>
 
 /**
  * \file OGF/mesh/commands/mesh_grob_surface_commands.h
@@ -105,7 +106,7 @@ namespace OGF {
          * \param [in] epsilon Tolerance for merging vertices, 
          *  in % of bbox diagonal.
          */
-        void merge_vertices(double epsilon = 1e-6);
+        void merge_vertices(double epsilon = 0.0);
         
        /**********************************************************/
 
@@ -148,7 +149,7 @@ namespace OGF {
         
         
        /**********************************************************/
-
+	
         /**
          * \menu Remesh
          * \brief Remeshes a (smooth) surface.
@@ -160,7 +161,11 @@ namespace OGF {
          *  shape adaptation, ...)
          * \param[in] tri_size_adapt adapt triangle sizes 
          *  (0.0 means no size adaptation, 1.0 for moderate 
-         *  size adaptation, ...)             
+         *  size adaptation, ...)            
+	 * \param[in] adjust if true, adjust the triangles of
+	 *  the remesh to better approximate the input mesh
+	 * \param[in] adjust_max_edge_distance maximum adjustment,
+	 *  relative to local average edge length 
          * \advanced
          * \param[in] normal_iter number of normal 
          *  smoothing iterations (if anisotropy is non-zero).
@@ -175,6 +180,8 @@ namespace OGF {
             unsigned int nb_points = 30000,
             double tri_shape_adapt = 1.0,
             double tri_size_adapt = 0.0,
+	    bool adjust = true,
+	    double adjust_max_edge_distance = 0.5,
             unsigned int normal_iter = 3,
             unsigned int Lloyd_iter = 5,
             unsigned int Newton_iter = 30,
@@ -239,7 +246,7 @@ namespace OGF {
        /**********************************************************/
 
         /**
-	  * \menu Boolean operations (experimental)
+	  * \menu Boolean operations
 	  * \brief Computes the union between two meshes.
           * \param[in] other name of the other mesh
           * \param[in] result name of the result mesh
@@ -248,16 +255,16 @@ namespace OGF {
 	  * \param[in] post_process triangulate result, remove small edges, 
 	  *  make sure there is no intersection
           */
-        void compute_union(
+        MeshGrob* compute_union(
 	    const MeshGrobName& other,
 	    const NewMeshGrobName& result = "result",
 	    bool pre_process=false,	    
-	    bool post_process=true
+	    bool post_process=false
         );
 
 
         /**
-	  * \menu Boolean operations (experimental)
+	  * \menu Boolean operations
 	  * \brief Computes the intersection between two meshes.
           * \param[in] other name of the other mesh
           * \param[in] result name of the result mesh
@@ -266,15 +273,15 @@ namespace OGF {
 	  * \param[in] post_process triangulate result, remove small edges, 
 	  *  make sure there is no intersection
           */
-        void compute_intersection(
+        MeshGrob* compute_intersection(
 	    const MeshGrobName& other,
 	    const NewMeshGrobName& result = "result",
 	    bool pre_process=false,
-	    bool post_process=true	    
+	    bool post_process=false	    
         );
 
         /**
-	  * \menu Boolean operations (experimental)
+	  * \menu Boolean operations
 	  * \brief Computes the difference between two meshes.
           * \param[in] other name of the other mesh
           * \param[in] result name of the result mesh
@@ -283,14 +290,51 @@ namespace OGF {
 	  * \param[in] post_process triangulate result, remove small edges, 
 	  *  make sure there is no intersection
           */
-        void compute_difference(
+        MeshGrob* compute_difference(
 	    const MeshGrobName& other,
 	    const NewMeshGrobName& result = "result",
 	    bool pre_process=false,
-	    bool post_process=true	    
+	    bool post_process=false	    
         );
 
+        /**
+	  * \menu Boolean operations
+	  * \brief Computes a boolean operation between two meshes
+          * \param[in] other name of the other mesh
+          * \param[in] result name of the result mesh
+          * \param[in] operation one of "A+B", "A*B", "A-B", "B-A"
+	  * \param[in] pre_process triangulate, inputs, remove small edges, 
+	  *  make sure there is no intersection
+	  * \param[in] post_process triangulate result, remove small edges, 
+	  *  make sure there is no intersection
+          */
+        gom_arg_attribute(operation, handler, "combo_box")
+        gom_arg_attribute(operation, values, "A+B;A*B;A-B;B-A")
+        MeshGrob* compute_boolean_operation(
+            const MeshGrobName& other,
+            const NewMeshGrobName& result = "result",
+            const std::string& operation = "A+B",
+	    bool pre_process=false,
+	    bool post_process=false	    
+        );
 
+        /**
+	  * \menu Boolean operations
+	  * \brief Computes intersections in a surface mesh
+          * \param[in] remove_internal_shells keep only facets on external hull
+          * \param[in] simplify_coplanar_facets retriangulates planar zones
+          * \param[in] coplanar_angle_tolerance in degrees
+          * \param[in] interpolate_attributes interpolate facet corner 
+          *   attributes on generated intersections. Deactivates coplanar
+          *   facets simplification if set.
+          */
+        void intersect(
+            bool remove_internal_shells = true,
+            bool simplify_coplanar_facets = true,
+            double coplanar_angle_tolerance = 0.001,
+            bool interpolate_attributes = false
+        );
+        
        /**********************************************************/
 	
        /**
@@ -310,14 +354,6 @@ namespace OGF {
            bool repair = true
        );
 
-       /**********************************************************/
-
-       /**
-        * \brief Projects a mesh onto a surface
-        * \param[in] surface the name of the surface
-        */
-       void project_on_surface(const MeshGrobName& surface);
-       
        /**********************************************************/
 
 	/**
@@ -381,12 +417,47 @@ namespace OGF {
 	    LSCM, SpectralLSCM, ABFplusplus
 	};
 
+        /**
+         * \menu Atlas/Segmentation
+         * \brief Segments a mesh.
+         */
+        void segment(
+            MeshSegmenter segmenter=SEGMENT_GEOMETRIC_VSA_L2,
+            index_t nb_segments=10
+        );
+        
 	/**
-	 * \menu Atlas
+	 * \menu Atlas/Segmentation
+	 * \brief Gets the charts attribute from a parameterized mesh.
+	 */
+	void get_charts();
+
+	/**
+	 * \menu Atlas/Segmentation
+	 * \brief Removes the charts attribute.
+	 */
+        void remove_charts();
+        
+	/**
+	 * \menu Atlas/Segmentation
+	 * \brief Unglues facet edges based on specified angle
+	 * \param[in] angle_threshold unglue facets along edge 
+	 *  if angle between adjacent facet is larger than threshold
+	 */
+	void unglue_sharp_edges(double angle_threshold=90);
+
+	/**
+	 * \menu Atlas/Segmentation
+	 * \brief Unglues facet edges adjacent to two different charts
+	 */
+	void unglue_charts();
+        
+	/**
+	 * \menu Atlas/Parameterization
 	 * \brief Computes texture coordinates of a surface.
-	 * \param[in] unglue_sharp_edges if true, ungle edegs with angle larger
-	 *  than threshold
-	 * \param[in] sharp_angles_threshold if the angle between the normals
+	 * \param[in] detect_sharp_edges if true, generate chart boundary
+         *  on edges with angle is larger than threshold.
+	 * \param[in] sharp_edges_threshold if the angle between the normals
 	 *  of two adjacent facets is larger than this threshold then the edge
 	 *  will be a chart boundary.
 	 * \param[in] param the algorithm used for parameterizing the charts.
@@ -396,25 +467,25 @@ namespace OGF {
 	 * \param[in] pack one of PACK_TETRIS, PACK_XATLAS
 	 */
 	void make_texture_atlas(
-	    bool unglue_sharp_edges = true,
-	    double sharp_angles_threshold = 45.0,
+	    bool detect_sharp_edges = false,
+	    double sharp_edges_threshold = 45.0,
 	    ChartParameterizer param=PARAM_ABF,
-	    ChartPacker pack=PACK_TETRIS,
+	    ChartPacker pack=PACK_XATLAS,
 	    bool verbose=false
 	);
 
 
 	/**
-	 * \menu Atlas
+	 * \menu Atlas/Parameterization
 	 * \brief Packs charts in texture space
 	 * \param[in] pack one of PACK_TETRIS, PACK_XATLAS
 	 */
 	void pack_texture_space(
-	    ChartPacker pack=PACK_TETRIS
+	    ChartPacker pack=PACK_XATLAS
 	);
 	
 	/**
-	 * \menu Atlas
+	 * \menu Atlas/Parameterization
 	 * \brief Computes texture coordinates of a single unfoldable surface.
 	 * \param[in] attribute the name of the attribute that will store
 	 *  texture coordinates.
@@ -429,7 +500,7 @@ namespace OGF {
 	);
 
 	/**
-	 * \menu Atlas
+	 * \menu Atlas/Baking
 	 * \brief Bakes normals from a surface to the texture atlas.
 	 * \param[in] surface the name of the mesh with normals to be baked.
 	 *  can be the current mesh or another one with higher-resolution
@@ -450,8 +521,8 @@ namespace OGF {
 
 
 	/**
-	 * \menu Atlas
-	 * \brief Bakes normals from a surface to the texture atlas.
+	 * \menu Atlas/Baking
+	 * \brief Bakes colors from a surface to the texture atlas.
 	 * \param[in] surface the name of the mesh with colors to be baked.
 	 *  can be the current mesh or another one with higher-resolution.
 	 * \param[in] color the name of the attribute with the colors to be
@@ -470,11 +541,34 @@ namespace OGF {
 	    index_t nb_dilate=2,
 	    const std::string& attribute="tex_coord"
 	);
-	
+
+
 	/**
-	 * \brief Projects the vertices of a mesh onto a surface.
+	 * \menu Atlas/Baking
+	 * \brief Bakes texture from a textured surface to an atlas.
+	 * \param[in] src_surface the name of the mesh with the 
+	 *   texture to be baked.
+	 *  can be the current mesh or another one with higher-resolution
+	 *  normals
+	 * \param[in] src_texture the texture associated with src_surface
+	 * \param[in] src_tex_coord the source facet corner attribute 
+	 *            with the texture coordinates
+	 * \param[in] size pixel-size of the generated texture
+	 * \param[in] image filename of the generated texture
+	 * \param[in] nb_dilate number of dilations 
+	 * \param[in] tex_coord the name of the facet corner attribute that 
+	 *  stores texture coordinates for the generated texture
 	 */
-	void project_vertices_on_surface(const MeshGrobName& surface);
+	void bake_texture(
+	    const MeshGrobName& src_surface,
+	    const ImageFileName& src_texture,
+	    const std::string& src_tex_coord="tex_coord",
+	    index_t size=1024,
+	    const NewImageFileName& image="texture.png",
+	    index_t nb_dilate=2,
+	    const std::string& tex_coord="tex_coord"
+	);
+
 	
     };
 }

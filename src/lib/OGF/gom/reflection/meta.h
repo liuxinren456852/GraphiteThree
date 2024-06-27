@@ -131,6 +131,16 @@ namespace OGF {
         MetaType* resolve_meta_type(const std::string& type_name) const ;
 
         /**
+         * \brief Finds a MetaClass by type name
+         * \param[in] type_name type name
+         * \return the MetaClass associated with \p type_name if it exists
+         *  or nullptr otherwise
+         */
+        MetaClass* resolve_meta_class(const std::string& type_name) const {
+            return dynamic_cast<MetaClass*>(resolve_meta_type(type_name));
+        }
+        
+        /**
          * \brief Finds a MetaType by typeid name
          * \param[in] typeid_name the C++ RTTI name of the system,
          *  as obtained by typeid<T>.name()
@@ -156,6 +166,12 @@ namespace OGF {
          */
         void list_types(std::vector<MetaType*>& types) ;
 
+        /**
+         * \brief Gets the list of all type names declared to the system.
+         * \param[out] type_names a vector of all type names, including aliases.
+         */
+        void list_type_names(std::vector<std::string>& type_names);
+        
         /**
          * \brief Initializes the Meta database
          * \note Does not need to be called by client code, called

@@ -354,6 +354,22 @@ namespace OGF {
 	int button, int action, int mods
     ) {
 
+        // Maps GLFW button id to RenderArea symbolic constant.
+        const MouseButton button_mapping[] = {
+            MOUSE_BUTTON_LEFT,
+            MOUSE_BUTTON_RIGHT,
+            MOUSE_BUTTON_MIDDLE,
+            MOUSE_BUTTON_WHEEL_UP,
+            MOUSE_BUTTON_WHEEL_DOWN,
+            MOUSE_BUTTON_AUX1,
+            MOUSE_BUTTON_AUX2
+        };
+        
+        if(size_t(button) > (sizeof(button_mapping)/sizeof(int))) {
+            return;
+        }
+
+
 	last_point_ndc_ = rendering_context_->screen_to_ndc(
 	    index_t(last_point_dc_.x), index_t(last_point_dc_.y)
         );
@@ -369,10 +385,7 @@ namespace OGF {
 	    case GLFW_PRESS: {
 		control_is_down_ = control;
 		shift_is_down_ = shift;
-		button_down_ =
-		    (button == GLFW_MOUSE_BUTTON_LEFT) * 1 +
-		    (button == GLFW_MOUSE_BUTTON_MIDDLE) * 2 + 
-		    (button == GLFW_MOUSE_BUTTON_RIGHT) * 3 ;
+                button_down_ = button_mapping[button];
 
 		if(button_down_ != 0) {
 		    mouse_down(
@@ -399,15 +412,12 @@ namespace OGF {
     ) {
 	// For retina displays: x and y are in 'window pixels',
 	// and GLUP project / unproject expect 'framebuffer pixels'.
-	double sx =
-	    double(get_frame_buffer_width()) / double(get_width());
-	    
-	double sy =
-	    double(get_frame_buffer_height()) / double(get_height());
+	double sx = double(get_frame_buffer_width()) / double(get_width());
+	double sy = double(get_frame_buffer_height()) / double(get_height());
 
 	xf *= sx;
 	yf *= sy;
-	
+
 	last_point_dc_.x = xf;
 	last_point_dc_.y = yf;
 	
@@ -420,8 +430,7 @@ namespace OGF {
 	    );
 	    
 	    last_point_wc_ = transform_point(
-		last_point_ndc_,
-		rendering_context_->inverse_viewing_matrix()
+		last_point_ndc_, rendering_context_->inverse_viewing_matrix()
 	    );
 
 	    vec2 delta_ndc = last_point_ndc_ - prev_point_ndc;
@@ -450,44 +459,28 @@ namespace OGF {
 
 	// Synthetize move/press/release mouse events
 	// with center button pressed.
-	
+        
 	vec2 last_point_dc_bak = last_point_dc_;
-
 	GLFWwindow* w = (GLFWwindow*)Application::instance()->impl_window();
-	
 	bool ctrl = (glfwGetKey(w, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS);
 	bool shift = (glfwGetKey(w, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
 
-	int mods=
-	    ctrl  * GLFW_MOD_CONTROL +
-	    shift * GLFW_MOD_SHIFT ;
-	
-	
-	cursor_pos_callback(
-	    double(width_/2), double(height_/2)
-	);
-	
-	mouse_button_callback(
-	    2, GLFW_PRESS, mods 
-	);
+        // Note: this is a GLFW button code (not RenderArea::Button that uses
+        // a different mapping).
+        const int button = (yoffset > 0) ? 3 : 4;
 
-	cursor_pos_callback(
-	    double(width_/2), double(height_/2) - double(yoffset)	    
-	);
-
-	mouse_button_callback(
-	    2, GLFW_RELEASE, mods 
-	);
-
-	cursor_pos_callback(
-	    last_point_dc_bak.x, last_point_dc_bak.y
-	);
+	int mods = (ctrl  ? GLFW_MOD_CONTROL : 0) |
+	           (shift ? GLFW_MOD_SHIFT   : 0) ;
 	
+        // Wheel emulates move/press/move/release event
+	cursor_pos_callback(last_point_dc_.x, last_point_dc_.y);
+	mouse_button_callback(button, GLFW_PRESS, mods);
+	cursor_pos_callback(last_point_dc_.x,last_point_dc_.y-double(yoffset));
+	mouse_button_callback(button, GLFW_RELEASE, mods);
+	cursor_pos_callback(last_point_dc_bak.x, last_point_dc_bak.y);
     }
     
-    void RenderArea::drop_callback(
-	int nb, const char** p
-    ) {
+    void RenderArea::drop_callback(int nb, const char** p) {
 	for(int i=0; i<nb; ++i) {
 	    dropped_file(p[i]);
 	}
@@ -595,13 +588,18 @@ namespace OGF {
 
     /*************************************************************************/
 
-    void RenderArea::snapshot(const std::string& filename, bool make_current) {
+    void RenderArea::snapshot(
+        const std::string& filename, bool make_current, bool with_gui
+    ) {
 	if(rendering_context_ == nullptr) {
 	    Logger::warn("RenderArea")
 		<< "Cannot take a snapshot, not initialized yet"
 		<< std::endl;
 	} else {
             Image image;
+            if(!with_gui) {
+                draw_memorized_frame();
+            }
             rendering_context_->snapshot(&image, make_current);
             ImageLibrary::instance()->save_image(filename,&image);
 	}

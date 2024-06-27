@@ -93,7 +93,12 @@ namespace OGF {
 	 * \param[out] names the variable names.
 	 */
 	virtual void list_names(std::vector<std::string>& names) const;
-	
+
+        /**
+         * \copydoc Object::search()
+         */
+        void search(const std::string& needle, const std::string& path="") override;
+        
       protected:
 	Object* object_;
     };
@@ -163,6 +168,47 @@ namespace OGF {
     };
 
     /*************************************************************************/ 
+
+    /**
+     * \brief A Scope that contains MetaTypes.
+     * \details Encapsulates query_interface() in such a way that 
+     *  automatic completion works when using object.I.
+     */
+    gom_class GOM_API MetaTypesScope : public Scope {
+      public:
+	/**
+	 * \brief MetaTypesScope constructor.
+	 * \param[in] prefix optional prefix for object names, 
+         *   for instance "OGF::" or "std::"
+	 */
+	MetaTypesScope(const std::string& prefix = "");
+
+	/**
+	 * \brief MetaTypesScope destructor.
+	 */
+	~MetaTypesScope() override;
+
+	/**
+	 * \copydoc Scope::resolve()
+	 */
+	Any resolve(const std::string& name) override;
+
+	/**
+	 * \copydoc Scope::list_names()
+	 */
+	void list_names(std::vector<std::string>& names) const override;
+
+    gom_slots:
+        MetaTypesScope* create_subscope(const std::string& name);
+        
+    private:
+        std::string prefix_;
+        std::map<std::string, Scope_var> subscopes_;
+    };
+
+
+    /*************************************************************************/ 
+
     
     /**
      * \brief Abstract base class for the GOM interpreter.
@@ -319,6 +365,15 @@ namespace OGF {
 	 */
 	virtual MetaType* resolve_meta_type(const std::string& type_name) const;
 
+        /**
+         * \brief Binds a MetaType
+         * \param[in] mtype the MetaType to be bound
+         * \retval true if the MetaType could be bound
+         * \retval false otherwise. This can happen if a MetaType with the same
+         *   name was already bound
+         */
+        virtual bool bind_meta_type(MetaType* mtype);
+
 	/**
 	 * \brief Creates an object.
 	 * \param[in] args the ArgList, with at least an argument classname. 
@@ -448,6 +503,20 @@ namespace OGF {
 	) {
 	    return instance_by_file_extension(extension);
 	}
+
+        /**
+         * \copydoc Object::search()
+         */
+        void search(const std::string& needle, const std::string& path="");
+        
+      public:
+        /**
+         * \brief Gets the default interpreter.
+         * \return a pointer to the first created interpreter.
+         */
+        static Interpreter* default_interpreter() {
+            return default_interpreter_;
+        }
 	
       gom_properties:
 	/**
@@ -481,7 +550,15 @@ namespace OGF {
 	Scope* get_globals() const {
 	    return globals_;
 	}
-	
+
+        /**
+         * \brief Gets the Scope with the meta types.
+         * \return a pointer to the Scope
+         */
+        Scope* get_meta_types() const {
+            return meta_types_;
+        }
+        
       public:
 	
         /**
@@ -715,10 +792,14 @@ namespace OGF {
 	> instance_;
 	static std::map<std::string, Interpreter*>
 	    instance_by_file_extension_;
+        static Interpreter* default_interpreter_;
 	
 	Scope_var globals_;
+        Scope_var meta_types_;
     };
 
+    typedef SmartPointer<Interpreter> Interpreter_var;
+    
     /*************************************************************************/
 
 } 

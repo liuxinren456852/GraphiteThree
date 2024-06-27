@@ -1,6 +1,10 @@
 --  GUI for the scene-graph, for use with Skin_imgui
 ----------------------------------------------------
 
+-- Needed to enable navigation in object list with
+-- arrow keys (declared in imgui_internal.h)
+ImGuiSelectableFlags_SelectOnNav = (1 << 21)
+
 -- All types and functions related with the scene graph.
 scene_graph_gui = {}
 scene_graph_gui.name = 'Scene'
@@ -117,8 +121,16 @@ function scene_graph_gui.menu_map.get(grob)
 	       if submenu_name:sub(-1) == '/' then
 		   submenu_name = submenu_name:sub(1,-2)
 	       end
+               -- If submenu starts with '/' it is an absolute path
 	       if submenu_name:sub(1,1) == '/' then
-	          menu_name = submenu_name:sub(2)
+                   menu_name = submenu_name:sub(2)
+                   -- Particular case: SceneGraph commands starting with '/',
+                   -- to be rooted in the menu bar, are stored in the '/menubar'
+                   -- menumap (and handled with
+                   -- specific code in graphite_gui.draw_menu_bar())
+                   if(grob.meta_class.name == 'OGF::SceneGraph') then
+                      menu_name = 'menubar/'..menu_name
+                   end
 	       else 
 	          menu_name = menu_name .. '/' .. submenu_name
 	       end
@@ -156,10 +168,12 @@ function scene_graph_gui.menu_map.draw(grob, node)
 	    
          autogui.command_menu_item(grob, v, object_as_string)	    
       else
-         if imgui.BeginMenu(v.name) then
-            scene_graph_gui.menu_map.draw(grob, v)
-	    imgui.EndMenu()
-	 end
+         if v.name ~= 'menubar' then
+            if imgui.BeginMenu(v.name) then
+               scene_graph_gui.menu_map.draw(grob, v)
+	       imgui.EndMenu()
+	    end
+         end
       end
    end
 end
@@ -217,6 +231,7 @@ function scene_graph_gui.grob_ops(grob, main_menu)
       end
 
       if imgui.MenuItem(imgui.font_icon('clone')..'  duplicate') then
+         main.save_state()
          scene_graph.current_object = name
          local dup = scene_graph.duplicate_current()
          autogui.rename_old = dup.name
@@ -225,10 +240,23 @@ function scene_graph_gui.grob_ops(grob, main_menu)
       end
       
       if imgui.MenuItem(imgui.font_icon('window-close')..'  delete') then
+         main.save_state()
          main.picked_grob = nil
          scene_graph.current_object = name
          scene_graph.delete_current_object()
          return nil
+      end
+
+      if imgui.MenuItem(imgui.font_icon('arrow-up')..' move up') then
+         main.save_state()
+         scene_graph.current_object = name
+         scene_graph.move_current_up()
+      end
+
+      if imgui.MenuItem(imgui.font_icon('arrow-down')..' move down') then
+         main.save_state()
+         scene_graph.current_object = name
+         scene_graph.move_current_down()
       end
 
       imgui.Separator()
@@ -265,8 +293,8 @@ function scene_graph_gui.about_window()
       )
       imgui.Separator()
       imgui.Text('Websites: ');
-      imgui.Text('   http://alice.loria.fr/software/graphite/doc/html/');      
-      imgui.Text('   http://alice.loria.fr/software/geogram/doc/html/');
+      imgui.Text('   https://github.com/BrunoLevy/GraphiteThree/');      
+      imgui.Text('   https://github.com/BrunoLevy/geogram');
       imgui.Separator()
       imgui.Text('\n')
       imgui.Text('   ')
@@ -303,7 +331,7 @@ function scene_graph_gui.about_window()
 	 main.scaling()*74, main.scaling()*22
       )
       imgui.SameLine()
-      imgui.Text('    Project PIXEL (formerly ALICE)')
+      imgui.Text('  ')
       imgui.Text('\n')
    end
    imgui.End()
@@ -411,11 +439,11 @@ function scene_graph_gui.scene_graph_menu(with_file_menu)
        commands_as_string
     )
     imgui.Separator()
-    scene_graph_gui.menu_map.draw(scene_graph)
+    scene_graph_gui.menu_map.draw(scene_graph, nil)
     if with_file_menu then
        imgui.Separator()
        scene_graph_gui.file_menu()
-    end       
+    end
 end
 
 -- \brief Handles the scene-graph operations menu
@@ -444,7 +472,7 @@ function scene_graph_gui.scene_graph_ops()
   
   sel,filename = imgui.FileDialog('##scene_graph##load_dlg',filename)
   if sel then
-     scene_graph.load_object(filename)
+     scene_graph.load_object({value=filename,invoked_from_gui=true})
   end
 
   sel,filename = imgui.FileDialog('##scene_graph##save_dlg',filename)
@@ -480,6 +508,7 @@ function scene_graph_gui.draw()
 	  )
 	  if sel then
 	     grob.visible=val
+             scene_graph.current_object = grob.name
 	  end
 	  imgui.SameLine()
 	  local icon = scene_graph_gui.grob_icon[grob.meta_class.name]
@@ -501,6 +530,7 @@ function scene_graph_gui.draw()
 		  ImGuiInputTextFlags_AutoSelectAll
              )
 	     if sel then
+                main.save_state()             
 		scene_graph.current_object = name
 		local o = scene_graph.current()
 		o.rename(autogui.rename_new)
@@ -510,7 +540,7 @@ function scene_graph_gui.draw()
 	     end
 	  elseif imgui.Selectable(
 	       name, name == current_name,
-	       ImGuiSelectableFlags_AllowDoubleClick
+	       ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_SelectOnNav
 	  ) then
 	      if imgui.IsMouseDoubleClicked(0) then
                   for i = 0,scene_graph.nb_children-1 do

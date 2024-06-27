@@ -4,7 +4,8 @@
 
 if FileSystem.os_name() ~= 'Windows' then
     gom.err('make_windows_dist: current OS is not Windows')
-else    
+
+else
 
 -- The version of Graphite, used in the name of the created
 -- ZIP archive.
@@ -195,55 +196,69 @@ function create_binary_distrib()
 
    gom.out("*** Now creating archive...")
 
-   ARCHIVE_NAME = TARGET_DIR ..
-         "/graphite" .. GRAPHITE_VERSION .. "-win64" .. ".zip"
+   ARCHIVE_SHORTNAME = 'graphite' .. GRAPHITE_VERSION .. '-win64.zip'
+   ARCHIVE_NAME = TARGET_DIR .. '/' .. ARCHIVE_SHORTNAME
 
    gom.out("Archive name = " .. ARCHIVE_NAME)
    make_archive(ARCHIVE_NAME, TARGET_DIR, "GraphiteThree")
 
-   gom.out("*** DONE ! ***")
+   F = io.open(TARGET_DIR..'/index.html','w')
+   F:write('<H1> Graphite for Windows Release </H1>\n')
+   F:write('<ul>\n')
+   F:write('<li> <a href="' .. ARCHIVE_SHORTNAME .. '">' .. ARCHIVE_SHORTNAME .. '</li>')
+   F:write('<ul>\n')   
+   io.close(F)
+
+   gom.out('*** DONE ! ***')
 
 end
 
 
 -- *****************************************************************************
 
+if graphite_main_window ~= nil then
 
-make_windows_dist_module = {}
-make_windows_dist_module.visible = false
-make_windows_dist_module.name = 'WinPacker'
-make_windows_dist_module.icon = '@box-open'
+   make_windows_dist_module = {}
+   make_windows_dist_module.visible = false
+   make_windows_dist_module.name = 'WinPacker'
+   make_windows_dist_module.icon = '@box-open'
 
-function make_windows_dist_module.draw_window()
-   SOURCE_PROJECT_ROOT = gom.get_environment_value("PROJECT_ROOT")
-   TARGET_PROJECT_ROOT = SOURCE_PROJECT_ROOT ..
-      "/../../GRAPHITEDIST/GraphiteThree"
+   function make_windows_dist_module.draw_window()
+      SOURCE_PROJECT_ROOT = gom.get_environment_value("PROJECT_ROOT")
+      TARGET_PROJECT_ROOT = SOURCE_PROJECT_ROOT ..
+         "/../../GRAPHITEDIST/GraphiteThree"
 
-   imgui.Text(
-       'Preparing Graphite source tree\n'..
-       'compiled under windows\n' ..
-       'for binary distribution...'
-   )
-   imgui.Separator()
-   imgui.Text('Version:')
-   imgui.SameLine()
-   _,GRAPHITE_VERSION = imgui.TextInput('##version', GRAPHITE_VERSION)
-   imgui.Separator()
-   imgui.Text('Are you sure ?')
-   imgui.Text('This will erase all files in:')
-   imgui.Text(TARGET_DIR)
-   imgui.Separator()
-   if imgui.Button('OK##make_windows_dist') then
-      make_windows_dist_module.visible = false
-      console_gui.visible = true      				
-      create_binary_distrib()
+      imgui.Text(
+          'Preparing Graphite source tree\n'..
+          'compiled under windows\n' ..
+          'for binary distribution...'
+      )
+      imgui.Separator()
+      imgui.Text('Version:')
+      imgui.SameLine()
+      _,GRAPHITE_VERSION = imgui.TextInput('##version', GRAPHITE_VERSION)
+      imgui.Separator()
+      imgui.Text('Are you sure ?')
+      imgui.Text('This will erase all files in:')
+      imgui.Text(TARGET_DIR)
+      imgui.Separator()
+      if imgui.Button('OK##make_windows_dist') then
+         make_windows_dist_module.visible = false
+         console_gui.visible = true      				
+         create_binary_distrib()
+      end
+      imgui.SameLine()
+      if imgui.Button('Cancel##make_windows_dist') then
+         make_windows_dist_module.visible = false      
+      end
    end
-   imgui.SameLine()
-   if imgui.Button('Cancel##make_windows_dist') then
-      make_windows_dist_module.visible = false      
-   end
+
+   graphite_main_window.add_module(make_windows_dist_module)
+
+else
+   -- if running in shell mode, create the distribution
+   create_binary_distrib()
+   os.exit()
 end
 
-graphite_main_window.add_module(make_windows_dist_module)
-
-end
+end -- this one is for "if FileSystem.os_name() == 'Windows'"

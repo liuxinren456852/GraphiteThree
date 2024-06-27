@@ -37,6 +37,7 @@
 #include <OGF/gom/reflection/meta_class.h>
 #include <OGF/gom/reflection/meta_constructor.h>
 #include <OGF/gom/reflection/meta.h>
+#include <OGF/gom/reflection/dynamic_object.h>
 
 /*****************************************************************************/
 
@@ -121,6 +122,61 @@ namespace OGF {
     MetaClass::~MetaClass() {
     }
 
+    Object* MetaClass::create(const ArgList& args) {
+        Object* result = nullptr;
+
+        if(is_abstract()) {
+            Logger::err("GOM") 
+                << this->name() 
+                << " is abstract (cannot create() instances)"
+                << std::endl;
+            return nullptr;
+        }
+        
+        MetaConstructor* constructor = best_constructor(args);
+        
+        if(constructor == nullptr) {
+            Logger::err("GOM") 
+                << this->name() 
+                << " does not have a matching constructor"
+                << " (missing arg?)" 
+                << std::endl;
+            for(unsigned int i=0; i<args.nb_args(); i++) {
+                Logger::err("Interpreter") << "arg " << i << " name= "
+                                           << args.ith_arg_name(i)
+                                           << " value= "
+					   << args.ith_arg_value(i).as_string()
+                                           << std::endl;
+            }
+            return nullptr;
+        }
+
+        result = factory()->create(args);
+
+        if(result == nullptr) {
+            Logger::err("GOM")
+                << this->name() << " : could not create object"
+                << std::endl;
+            return nullptr;
+        }
+
+        // Args that are not used by the constructor are set as properties
+        if(constructor != nullptr) {
+            for(unsigned int i=0; i<args.nb_args(); i++) {
+                if(!constructor->has_arg(args.ith_arg_name(i))) {
+                    MetaProperty* mprop = find_property(args.ith_arg_name(i));
+                    if(mprop != nullptr && !mprop->read_only()) {
+                        result->set_property(
+                            args.ith_arg_name(i), args.ith_arg_value(i)
+                        );
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+    
     void MetaClass::pre_delete() {
 	MetaType::pre_delete();
         for(index_t i=0; i<nb_members(false); ++i) {
@@ -380,39 +436,101 @@ namespace OGF {
         index_t nb_used_args = 0;
         std::vector<MetaConstructor*> constructors;
         get_constructors(constructors);
-        for(index_t i = 0; i<constructors.size(); i++) {
-            MetaConstructor* cur = constructors[i];
-            if(cur->check_args(args)) {
-                index_t cur_nb_used_args = cur->nb_used_args(args);
-                if(cur_nb_used_args >= nb_used_args) {
+        if(args.has_unnamed_args()) {
+            for(MetaConstructor* cur: constructors) {
+                if(args.nb_args() == cur->nb_args()) {
                     best_so_far = cur;
-                    nb_used_args = cur_nb_used_args;
+                }
+            }
+        } else {
+            for(MetaConstructor* cur: constructors) {
+                if(cur->check_args(args)) {
+                    index_t cur_nb_used_args = cur->nb_used_args(args);
+                    if(cur_nb_used_args >= nb_used_args) {
+                        best_so_far = cur;
+                        nb_used_args = cur_nb_used_args;
+                    }
                 }
             }
         }
         return best_so_far;
     }
 
-//__________________________________________________________________________
+
+    MetaClass* MetaClass::create_subclass(
+        const std::string& name, bool is_abstract
+    ) {
+        MetaClass* result = new DynamicMetaClass(
+            name, this->name(), is_abstract
+        );
+        Meta::instance()->bind_meta_type(result);
+        return result;
+    }
+
+    void MetaClass::search(const std::string& needle, const std::string& path) {
+        MetaInformation::search(needle, path);
+        if(path.find(needle) != std::string::npos) {
+            return;
+        }
+        std::vector<MetaMember*> members;
+        get_members(members, true);
+        for(MetaMember* member: members) {
+            member->search(needle, path + "." + member->name());
+        }
+    }
+
+    std::string MetaClass::get_doc() const {
+        std::string result;
+        // Discard uninteresting doc about the MetaClass
+        // of the MetaClass !!
+        if(this == ogf_meta<MetaClass>::type()) {
+            return result;
+        }
+        result = name();
+        if(has_custom_attribute("help")) {
+            result += "\n";
+            result += custom_attribute_value("help");
+        }
+        return result;
+    }
+    
+/****************************************************************************/
 
     Object* FactoryMetaClass::create(const ArgList& args) {
         MetaConstructor* best_constructor = 
             meta_class()->best_constructor(args);
-        if(best_constructor != nullptr) {
-            ogf_assert(best_constructor->factory() != nullptr);
+
+        if(best_constructor == nullptr) {
+            return nullptr;
+        }
+        
+        ogf_assert(best_constructor->factory() != nullptr);
+        Object* result = nullptr;
+        
+        if(args.has_unnamed_args()) {
+            geo_assert(args.nb_args() == best_constructor->nb_args());
+            ArgList named_args;
+            for(index_t i=0; i<args.nb_args(); ++i) {
+                named_args.create_arg(
+                    best_constructor->ith_arg_name(i),
+                    args.ith_arg_value(i)
+                );
+            }
+            result = best_constructor->factory()->create(named_args);
+        } else {
             if(best_constructor->nb_default_args(args) != 0) {
                 ArgList all_args = args;
                 best_constructor->add_default_args(all_args);
-                return best_constructor->factory()->create(all_args);
-            }
-            Object* result = best_constructor->factory()->create(args);
-            result->meta_class(); // initializes metaclass information.
-            return result;
+                result = best_constructor->factory()->create(all_args);
+            } else 
+                result = best_constructor->factory()->create(args);
         }
-        return nullptr;
-    }    
+        result->meta_class(); // initializes metaclass information.
+        
+        return result;
+    }
 
-//__________________________________________________________________________
 
+    
 }
 

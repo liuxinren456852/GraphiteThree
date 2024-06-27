@@ -38,6 +38,7 @@
 
 #include <OGF/mesh/commands/mesh_grob_points_commands.h>
 #include <geogram/points/co3ne.h>
+#include <geogram/points/kd_tree.h>
 #include <geogram/mesh/mesh_geometry.h>
 #include <geogram/mesh/mesh_repair.h>
 #include <geogram/mesh/mesh_AABB.h>
@@ -161,12 +162,20 @@ namespace OGF {
 	    pts[2*v+1] = mesh_grob()->vertices.point_ptr(v)[1];	    
 	}
 	delaunay->set_vertices(mesh_grob()->vertices.nb(), pts.data());
-	Logger::out("Delaunay") << "Created " << delaunay->nb_cells() << " triangles" << std::endl;
+	Logger::out("Delaunay") << "Created "
+				<< delaunay->nb_cells() << " triangles"
+				<< std::endl;
 	mesh_grob()->facets.create_triangles(delaunay->nb_cells());
 	FOR(t, delaunay->nb_cells()) {
-	    mesh_grob()->facets.set_vertex(t, 0, index_t(delaunay->cell_vertex(t,0)));
-	    mesh_grob()->facets.set_vertex(t, 1, index_t(delaunay->cell_vertex(t,1)));
-	    mesh_grob()->facets.set_vertex(t, 2, index_t(delaunay->cell_vertex(t,2)));	    
+	    mesh_grob()->facets.set_vertex(
+		t, 0, index_t(delaunay->cell_vertex(t,0))
+	    );
+	    mesh_grob()->facets.set_vertex(
+		t, 1, index_t(delaunay->cell_vertex(t,1))
+	    );
+	    mesh_grob()->facets.set_vertex(
+		t, 2, index_t(delaunay->cell_vertex(t,2))
+	    );	    
 	}
 	mesh_grob()->facets.connect();
 	mesh_grob()->unlock_graphics();
@@ -201,11 +210,11 @@ namespace OGF {
 				  << std::endl;
 	    return;
 	}
+	
         mesh_grob()->vertices.set_dimension(3);
-        
         MeshGrob* points = MeshGrob::find_or_create(scene_graph(), points_name);
         points->clear();
-
+	
         CentroidalVoronoiTesselation CVT(mesh_grob());
         CVT.compute_initial_sampling(nb_points);
 
@@ -350,15 +359,214 @@ namespace OGF {
     }
 
     
-    void MeshGrobPointsCommands::create_vertex(double x, double y, double z) {
+    void MeshGrobPointsCommands::create_vertex(
+	double x, double y, double z, bool selected
+    ) {
         index_t v = mesh_grob()->vertices.create_vertex();
         double* p = mesh_grob()->vertices.point_ptr(v);
         p[0] = x;
         p[1] = y;
         p[2] = z;
+	if(selected) {
+	    Attribute<bool> selection(
+		mesh_grob()->vertices.attributes(), "selection"
+	    );
+	    selection[v] = true;
+	}
         mesh_grob()->update();
     }
 
+    void MeshGrobPointsCommands::detect_outliers(
+	index_t N, double R, bool relative_R
+    ) {
+	// Remove duplicated vertices
+	mesh_repair(*mesh_grob(), GEO::MESH_REPAIR_COLOCATE, 0.0);
+
+	// Compute nearest neighbors using a KdTree.
+	NearestNeighborSearch_var NN = new BalancedKdTree(3); // 3 is for 3D
+	NN->set_points(
+	    mesh_grob()->vertices.nb(), mesh_grob()->vertices.point_ptr(0)
+	);
+        Attribute<bool> is_outlier(
+            mesh_grob()->vertices.attributes(), "selection"
+        );
+
+	if(relative_R) {
+	    R *= bbox_diagonal(*mesh_grob());
+	}
+	
+	double R2 = R*R; // squared threshold
+	// (KD-tree returns squared distances)
+       
+	parallel_for_slice(
+	    0,mesh_grob()->vertices.nb(),
+	    [this,N,&NN,R2,&is_outlier](index_t from, index_t to) {
+		vector<index_t> neigh(N);
+		vector<double> neigh_sq_dist(N);
+		for(index_t v=from; v<to; ++v) {
+		    NN->get_nearest_neighbors(
+			N, mesh_grob()->vertices.point_ptr(v),
+			neigh.data(), neigh_sq_dist.data()
+		    );
+		    is_outlier[v] = (neigh_sq_dist[N-1] > R2);
+		}
+	    }
+	);
+	mesh_grob()->update();
+    }
+
+
+    void MeshGrobPointsCommands::estimate_density(
+	double R, bool relative_R, const std::string& attribute
+    ) {
+	if(relative_R) {
+	    R *= bbox_diagonal(*mesh_grob());
+	}
+	
+	double R2 = R*R;
+	
+	Attribute<double> density(
+	    mesh_grob()->vertices.attributes(), attribute
+	);
+	NearestNeighborSearch_var NN = new BalancedKdTree(3); // 3 is for 3D
+	NN->set_points(
+	    mesh_grob()->vertices.nb(), mesh_grob()->vertices.point_ptr(0)
+	);
+
+	double Bvol = (4.0 / 3.0) * M_PI * R*R*R;
+	
+	parallel_for_slice(
+	    0,mesh_grob()->vertices.nb(),
+	    [this,R2,&NN,&density,Bvol](index_t from, index_t to) {
+		vector<index_t> neigh;
+		vector<double> neigh_sq_dist;
+		for(index_t v=from; v<to; ++v) {
+		    index_t N=0;
+		    while(N == 0 || neigh_sq_dist[N-1] < R2) {
+			N = (N == 0) ? 50 : index_t(double(N)*1.2);
+			N = std::min(N, mesh_grob()->vertices.nb());
+			neigh.resize(N);
+			neigh_sq_dist.resize(N);
+			NN->get_nearest_neighbors(
+			    N, mesh_grob()->vertices.point_ptr(v),
+			    neigh.data(), neigh_sq_dist.data()
+			);
+		    }
+		    index_t nb = 0;
+		    for(nb = 0; neigh_sq_dist[nb] < R2; ++nb) {
+		    }
+		    geo_assert(nb < N);
+		    density[v] = double(nb) / Bvol;
+		}
+	    }
+	);
+	
+	show_attribute("vertices." + attribute);
+	mesh_grob()->update();
+    }
+
+    void MeshGrobPointsCommands::delete_selected_points() {
+        Attribute<bool> selection;
+        selection.bind_if_is_defined(
+            mesh_grob()->vertices.attributes(), "selection"
+        );
+        
+        if(!selection.is_bound()) {
+            return;
+        }
+
+        {
+            vector<index_t> delete_e(mesh_grob()->edges.nb(),0);
+            for(index_t e: mesh_grob()->edges) {
+                if(
+                    selection[mesh_grob()->edges.vertex(e,0)] ||
+                    selection[mesh_grob()->edges.vertex(e,1)]
+                ) {
+                    delete_e[e] = 1;
+                }
+            }
+            mesh_grob()->edges.delete_elements(delete_e, false);
+        }
+
+        {
+            vector<index_t> delete_f(mesh_grob()->facets.nb(),0);
+            for(index_t f: mesh_grob()->facets) {
+                for(index_t lv=0;
+                    lv<mesh_grob()->facets.nb_vertices(f); ++lv
+                   ) {
+                    if(selection[mesh_grob()->facets.vertex(f,lv)]) {
+                        delete_f[f] = 1;
+                        break;
+                    }
+                }
+            }
+            mesh_grob()->facets.delete_elements(delete_f, false);
+        }
+
+        {
+            vector<index_t> delete_c(mesh_grob()->cells.nb(),0);
+            for(index_t c: mesh_grob()->cells) {
+                for(index_t lv=0;
+                    lv<mesh_grob()->cells.nb_vertices(c); ++lv
+                   ) {
+                    if(selection[mesh_grob()->cells.vertex(c,lv)]) {
+                        delete_c[c] = 1;
+                        break;
+                    }
+                }
+            }
+            mesh_grob()->cells.delete_elements(delete_c, false);
+        }
+
+        vector<index_t> remove_element(selection.size(), 0);
+        for(index_t i=0; i<selection.size(); ++i) {
+            remove_element[i] = index_t(selection[i]);
+        }
+
+        mesh_grob()->vertices.delete_elements(remove_element, false);
+        
+        mesh_grob()->update();
+    }
+
+    void MeshGrobPointsCommands::project_on_surface(
+	const MeshGrobName& surface_name
+    ) {
+        MeshGrob* surface = MeshGrob::find(scene_graph(), surface_name);
+        if(surface == nullptr) {
+            Logger::err("Mesh")
+		<< surface_name << ": no such surface" << std::endl;
+            return;
+        }
+
+	if(surface == mesh_grob()) {
+	    Logger::out("Surface") << "Cannot project surface onto itself"
+				   << std::endl;
+	}
+	
+	if(surface->facets.nb() == 0) {
+	    Logger::out("Surface") << surface_name << " has no facets"
+				   << std::endl;
+	    return;
+	}
+	
+        //   We need to lock the graphics because the AABB will change
+        // the order of the surface facets.
+        surface->lock_graphics();
+        MeshFacetsAABB AABB(*surface);
+
+	for(index_t i: mesh_grob()->vertices) {
+	    vec3 p(mesh_grob()->vertices.point_ptr(i));
+	    vec3 q;
+	    double sq_dist;
+	    AABB.nearest_facet(p,q,sq_dist);
+	    for(index_t c=0; c<3; ++c) {
+		mesh_grob()->vertices.point_ptr(i)[c] = q[c];
+	    }
+	}
+        
+        surface->unlock_graphics();
+        mesh_grob()->update();
+    }
 
     
 }

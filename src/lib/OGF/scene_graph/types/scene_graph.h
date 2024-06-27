@@ -65,10 +65,12 @@ namespace OGF {
 
         /**
          * \brief SceneGraph constructor.
-	 * \param[in] interpreter a pointer to the main interpreter.
+	 * \param[in] interpreter a pointer to the main interpreter, or
+         *   nullptr. If interpreter is set to nullptr, then the default 
+         *   interpreter is used.
          */
-        SceneGraph(Interpreter* interpreter);
-
+        SceneGraph(Interpreter* interpreter = nullptr);
+        
         /**
          * \brief SceneGraph destructor.
          */
@@ -111,7 +113,7 @@ namespace OGF {
 	 *  the file.
 	 * \retval false otherwise.
 	 */
-	bool save_viewer_properties(const std::string& value);
+         bool save_viewer_properties(const std::string& value);
 	
         /**
          * \brief Deletes the current object.
@@ -128,6 +130,20 @@ namespace OGF {
         Grob* duplicate_current();
 
         /**
+         * \brief Swaps the current object with the previous one
+         * \details Does nothing if there is no current object or
+         *  if current object is the first one
+         */
+        void move_current_up();
+
+        /**
+         * \brief Swaps the current object with the next one
+         * \details Does nothing if there is no current object or
+         *  if current object is the last one
+         */
+        void move_current_down();
+        
+        /**
          * \brief Clears this SceneGraph.
          * \details Deletes all the objects of this SceneGraph.
          */
@@ -140,11 +156,15 @@ namespace OGF {
          * \param[in] type the class name that should be used to 
          *  create the object, or "default" (then it is deduced from
          *  the file extension)
+         * \param[in] invoked_from_gui set to true by file menu, and
+         *  makes it change directory to the directory that contains the
+         *  file
          * \return a pointer to the loaded object, or nullptr if no object
          *  could be loaded
          */
         Grob* load_object(
-            const FileName& value, const std::string& type="default"
+            const FileName& value, const std::string& type="default",
+            bool invoked_form_gui=false
         );
 
         /**
@@ -154,9 +174,13 @@ namespace OGF {
          * \param[in] type the class name that should be used to 
          *  create the objects, or "default" (then it is deduced from
          *  the file extensions)
+         * \param[in] invoked_from_gui set to true by file menu, and
+         *  makes it change directory to the directory that contains the
+         *  file
          */
         void load_objects(
-            const std::string& value, const std::string& type="default"
+            const std::string& value, const std::string& type="default",
+            bool invoked_form_gui=false
         );
 
         /**
@@ -170,13 +194,26 @@ namespace OGF {
          * \param[in] classname the class name of the object to create,
          *  as a string, with the "OGF::" prefix
          * \param[in] name the name of the object in the SceneGraph. If no 
-	 *  name is specified, then the created object will be given a default name.
+	 *  name is specified, then the created object will be 
+         *  given a default name.
          * \return a pointer to the created object
          */
         Grob* create_object(
 	    const GrobClassName& classname, const std::string& name = ""
 	);
 
+
+        /**
+         * \brief Creates a mesh.
+         * \param[in] name the name of the mesh in the SceneGraph. If no 
+	 *  name is specified, then the created object will be 
+         *  given a default name.
+         * \return a pointer to the created mesh
+         */
+        Grob* create_mesh(const std::string& name = "") {
+            return create_object("OGF::MeshGrob",name);
+        }
+        
 	/**
 	 * \brief Creates a new object or retreives an existing one.
 	 * \param[in] classname the class name of the object to create,
@@ -204,6 +241,17 @@ namespace OGF {
          */
         void set_visibility(index_t index, bool value);
 
+
+        /**
+         * \brief Associates a Commands class to a Grob class.
+         * \details It is used with Commands class created in a script.
+         * \param[in] grob_class the MetaClass of the grob
+         * \param[in] commands_class the MetaClass of the commands
+         */
+        void register_grob_commands(
+            MetaClass* grob_class, MetaClass* commands_class
+        );
+        
     gom_properties:
         /**
          * \brief Gets the current object by name.

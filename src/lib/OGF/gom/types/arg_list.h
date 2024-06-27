@@ -42,6 +42,7 @@
 #include <geogram/basic/string.h>
 #include <geogram/basic/memory.h>
 #include <iostream>
+#include <type_traits>
 
 /**
  * \file OGF/gom/types/arg_list.h
@@ -51,12 +52,18 @@
 namespace OGF {
 
     /**
+     * \brief Base class for all Names in Graphite (GrobName ...).
+     * \details Used by the mechanism that transforms an Object* to its
+     *  name for functions that take names.
+     */
+    class NameBase {
+    };
+    
+    /**
      * \brief Represents a list of name-value pairs.
      */
     class GOM_API ArgList {
-    private:
-
-    
+        
     public:
 
         /**
@@ -71,7 +78,8 @@ namespace OGF {
          * \brief ArgList copy-constructor.
          * \param[in] rhs a const reference to the ArgList to be copied
          */
-        ArgList(const ArgList& rhs) : argval_(rhs.argval_), argname_(rhs.argname_) {
+        ArgList(const ArgList& rhs) :
+           argval_(rhs.argval_), argname_(rhs.argname_) {
         }
 
         /**
@@ -92,6 +100,23 @@ namespace OGF {
             return argname_.size();
         }
 
+        /**
+         * \brief Tests whether this ArgList has unnamed args
+         * \retval true if this ArgList has unnamed args
+         * \retval false otherwise
+         */
+        bool has_unnamed_args() const {
+            if(nb_args() == 0) {
+                return false;
+            }
+            for(index_t i=0; i<nb_args(); ++i) {
+                if(ith_arg_name(i) != "arg#" + String::to_string(i)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        
         /**
          * \brief Tests whether an argument of a given name
          *  exists in this ArgList.
@@ -151,7 +176,10 @@ namespace OGF {
         template <class T> T ith_arg_value(index_t i) const {
             geo_debug_assert(i < nb_args());
 	    T result;
-	    if(!argval_[i].get_value(result)) {
+	    if(
+                !argval_[i].get_value(result) &&
+                !get_name(argval_[i], result)
+            ) {
 		arg_type_error(i, typeid(T).name());
 	    }
 	    return result;
@@ -235,6 +263,15 @@ namespace OGF {
 	    return *(argval_.rbegin());
         }
 
+        /**
+         * \brief Creates an uninitialized unnamed argument.
+	 * \return a reference to the Any that will store the argument.
+         * \pre nb_args() == 0 || has_unnamed_args()
+         */
+        Any& create_unnamed_arg() {
+            geo_debug_assert(nb_args() == 0 || has_unnamed_args());
+            return create_arg("arg#" + String::to_string(nb_args()));
+        }
 	
         /**
          * \brief Creates an argument.
@@ -376,7 +413,10 @@ namespace OGF {
 	    index_t i = find_arg_index(name);
 	    geo_debug_assert(i != index_t(-1));
 	    T result;
-	    if(!argval_[i].get_value(result)) {
+	    if(
+                !argval_[i].get_value(result) &&
+                !get_name(argval_[i], result)
+            ) {
 		arg_type_error(i, typeid(T).name());
 	    }
 	    return result;
@@ -436,7 +476,43 @@ namespace OGF {
 	void arg_type_error(
 	    index_t i, const std::string& expected_typeid_name
 	) const;
-	
+
+
+        /**
+         * \brief Converts a pointer to Object into a string using its name
+         *  attribute if target type is a xxxName
+         * \details Used by the mechanism that lets one pass Object* to functions
+         *  that take ObjectNames
+         * \param[in] argval the stored value 
+         * \param[out] name the name to be read
+         * \retval true if \p argval is a pointer to Object that has
+         *  a name attribute and \p name's type is a xxxName
+         * \retval false otherwise
+         */
+        template <class T> static bool get_name(const Any& argval, T& name) {
+            if(!std::is_base_of<NameBase, T>::value) {
+                return false;
+            }
+            Any name_prop;
+            if(!get_object_name(argval, name_prop)) {
+                return false;
+            }
+	    return name_prop.get_value(name);
+        }
+
+        /**
+         * \brief Gets the name of an object
+         * \details Used by the mechanism that lets one pass Object* to functions
+         *  that take ObjectNames
+         * \param[in] object an Any with a pointer to the object
+         * \param[out] name an Any with the name of the object
+         * \retval true if \p object has a pointer to an Object that has
+         *  a name property
+         * \retval false otherwise
+         */
+        static bool get_object_name(const Any& object, Any& name);
+
+        
     private:
         vector<Any> argval_;
 	vector<std::string> argname_;

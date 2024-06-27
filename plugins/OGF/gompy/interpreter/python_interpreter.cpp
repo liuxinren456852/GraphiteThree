@@ -134,7 +134,7 @@ namespace {
      * \details Used for NumPy interop.
      */
     void delete_array_interface(PyObject* capsule) {
-        void* ptr = PyCapsule_GetContext(capsule);
+        void* ptr = PyCapsule_GetPointer(capsule,nullptr);
         geo_assert(ptr != nullptr);
 	PyArrayInterface* array_interface = static_cast<PyArrayInterface*>(ptr);
 	delete_array_interface_internal(array_interface);
@@ -306,7 +306,7 @@ namespace {
      * \retval false otherwise.
      */
     bool graphite_Object_has_getter(const std::string& name);
-    
+
     /***************** Python wrapper for Graphite object **************/
 
     PyObject* graphite_Object_new(
@@ -384,6 +384,17 @@ namespace {
 	    return result;
 	}
 
+        // Case 4: object is a meta class, attribute may be a meta member
+        MetaClass* object_as_meta_class = dynamic_cast<MetaClass*>(object);
+        if(object_as_meta_class != nullptr) {
+            MetaMember* mmember = object_as_meta_class->find_member(name);
+            if(mmember != nullptr) {
+                PyObject* result = (PyObject*)graphite_Object_new(mmember);
+                Py_INCREF(result);
+                return result;
+            }
+        }
+        
 	// All other cases: use Python generic attribute mechanism.
 	PyObject* result = PyObject_GenericGetAttr(self_in, name_in);
 	return(result);
@@ -603,6 +614,46 @@ namespace {
 	return result;
     }
 
+    // TEMP TEST
+    PyObject* graphite_array_inspect(PyObject* self_in, PyObject* pyobject_in) {
+        geo_argused(self_in);	
+	geo_argused(pyobject_in);
+        Logger::out("GOM") << "Test Numpy array interop" << std::endl;
+
+        if(PyObject_HasAttrString(pyobject_in,"__array_struct__")) { 
+            Logger::out("GOM") << "  has __array_struct__ attribute"
+                               << std::endl;
+            PyObject* capsule = PyObject_GetAttrString(pyobject_in,"__array_struct__");
+            Py_INCREF(capsule);
+            if(PyCapsule_CheckExact(capsule)) {
+                Logger::out("GOM") << "  it is a capsule, good !" << std::endl;
+
+                void* ptr = PyCapsule_GetPointer(capsule,nullptr);
+                geo_assert(ptr != nullptr);
+                PyArrayInterface* array_interface = static_cast<PyArrayInterface*>(ptr);
+
+                if(array_interface == nullptr) {
+                    Logger::out("GOM") << "   array interface is null" << std::endl;
+                } else {
+                    Logger::out("GOM") << "--array interface--" << std::endl
+                                       << "      two: " << array_interface->two << std::endl
+                                       << "       nd: " << array_interface->nd  << std::endl
+                                       << " typekind: " << array_interface->typekind << std::endl
+                                       << "    flags: " << array_interface->flags << std::endl
+                                       << std::endl;
+                }
+            } else {
+                Logger::out("GOM") << "No capsule found" << std::endl;
+            }
+            Py_DECREF(capsule);
+        } else {
+            Logger::out("GOM") << "No __array_struct__" << std::endl;
+        }
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    
+    
     /**
      * \brief Methods definition for Python wrapper around Graphite object.
      */
@@ -613,6 +664,12 @@ namespace {
 	    METH_NOARGS,
 	    "Implementation of dir() for Graphite objects"
 	},
+        {
+            "array_inspect",
+            graphite_array_inspect,
+            METH_O,
+            "Inspect NumPy arrays (test)"
+        }, // TEMP TEST
         {
             nullptr, /* ml_name */
             nullptr, /* ml_meth */
@@ -686,18 +743,7 @@ namespace {
 	if(object == nullptr) {
 	    result_string = "null";
 	} else {
-	    MetaClass* mclass = object->meta_class();
-	    // Discard uninteresting doc about the MetaClass
-	    // of the MetaClass !!
-	    if(mclass == ogf_meta<MetaClass>::type()) {
-		Py_INCREF(Py_None);
-		return Py_None;
-	    }
-	    result_string = mclass->name();
-	    if(mclass->has_custom_attribute("help")) {
-		result_string += "\n";
-		result_string += mclass->custom_attribute_value("help");
-	    }
+            result_string = object->get_doc();
 	}
 	PyObject* result = string_to_python(result_string);
 	Py_INCREF(result);
@@ -826,75 +872,10 @@ namespace {
     
     /**************************************************/
 
-    PyObject* graphite_callable_get_doc(PyObject* self_in, void* closure) {
-	geo_argused(closure);
-	geo_debug_assert(PyGraphite_Check(self_in));
-	graphite_Object* self = (graphite_Object*)self_in;
-	Object* object = self->object;
-	Request* rq = dynamic_cast<Request*>(object);
-	if(rq == nullptr) {
-	    return graphite_get_doc(self_in, closure);
-	}
-	std::string result_string;
-	MetaMethod* mmethod = rq->method();
-	MetaClass* mclass = mmethod->container_meta_class();
-
-	result_string  = "GOM function\n";
-	result_string += "============\n";
-	result_string += 
-	    mclass->name() + "::" + mmethod->name() + "(";
-	for(index_t i=0; i<mmethod->nb_args(); ++i) {
-	    result_string += mmethod->ith_arg_name(i);
-	    if(i != mmethod->nb_args()-1) {
-		result_string += ",";
-	    }
-	}
-	result_string += ")\n";
-	if(mmethod->has_custom_attribute("help")) {
-	    result_string += mmethod->custom_attribute_value("help");
-	    result_string += "\n";
-	}
-	if(mmethod->nb_args() != 0) {
-	    result_string += "Parameters\n";
-	    result_string += "==========\n";
-	    for(index_t i=0; i<mmethod->nb_args(); ++i) {
-		result_string += mmethod->ith_arg_name(i);
-		result_string += " : ";
-		result_string += mmethod->ith_arg_type(i)->name();
-		if(mmethod->ith_arg(i)->has_default_value()) {
-		    result_string += " = ";
-		    bool is_string = (
-			mmethod->ith_arg(i)->default_value().meta_type() ==
-			ogf_meta<std::string>::type()
-		    );
-		    if(is_string) {
-			result_string += '\'';
-		    }
-		    result_string +=
-			mmethod->ith_arg(i)->default_value().as_string();
-		    if(is_string) {
-			result_string += '\'';
-		    }
-		}
-		result_string += "\n" ;
-		if(mmethod->ith_arg(i)->has_custom_attribute("help")) {
-		    result_string += mmethod->ith_arg(i)
-			->custom_attribute_value("help");
-		    result_string += "\n";
-		}
-	    }
-	}
-
-	
-	PyObject* result = string_to_python(result_string);
-	Py_INCREF(result);
-	return result;
-    }
-
     PyGetSetDef graphite_Callable_getsets[] = {
 	{
 	    (char*)"__doc__", 
-	    graphite_callable_get_doc,
+	    graphite_get_doc,
 	    nullptr, 
 	    nullptr, 
 	    nullptr  
@@ -974,7 +955,7 @@ namespace {
         std::string result;
         if(PyUnicode_Check(obj)) {
             Py_ssize_t size;
-            const char* str = _PyUnicode_AsStringAndSize(obj, &size);
+            const char* str = PyUnicode_AsUTF8AndSize(obj, &size);
             result = std::string(str, size_t(size));
         } else if(PyGraphite_Check(obj)) {
             Object* graphite_obj = ((graphite_Object*)obj)->object;
@@ -986,7 +967,7 @@ namespace {
         } else {
             PyObject* s = PyObject_Str(obj); 
             Py_ssize_t size;
-            const char* str = _PyUnicode_AsStringAndSize(s, &size);
+            const char* str = PyUnicode_AsUTF8AndSize(s, &size);
                   // [TODO: check whether this is correct]
             result = std::string(str, size_t(size));
             Py_DECREF(s);
@@ -1190,7 +1171,7 @@ namespace {
 	Py_INCREF(result);
 	return result;
     }
-    
+
     PyMethodDef graphite_module_methods[] = {
 	{
 	    "interpreter",

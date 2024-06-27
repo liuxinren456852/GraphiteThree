@@ -35,6 +35,7 @@
  */
 
 #include <OGF/gom/types/callable.h>
+#include <OGF/gom/reflection/meta.h>
 
 namespace OGF {
 
@@ -68,5 +69,10 @@ namespace OGF {
 	return object_->invoke_method(method_->name(), args, ret_val);	
     }
 
+    std::string Request::get_doc() const {
+        // Get documentation from the meta-method
+	return method()->get_doc();
+    }
+    
     /*******************************************************************/    
 }

@@ -22,7 +22,7 @@ function preferences_window.edit_list(label, vals_string, extension)
       table.insert(vals,s)
    end
    imgui.PushItemWidth(-1)
-   imgui.ListBoxHeader(label, #vals)
+   imgui.BeginListBox(label, #vals)
    for i = 1,#vals do
       if imgui.Selectable(
             vals[i],
@@ -31,7 +31,7 @@ function preferences_window.edit_list(label, vals_string, extension)
          preferences_window.selected[label] = vals[i]
       end
    end
-   imgui.ListBoxFooter()
+   imgui.EndListBox()
    imgui.PopItemWidth()
    local w = imgui.GetWindowWidth()/2 - main.scaling()*10
    local rem_selected_lbl = 'Remove selected'
@@ -214,12 +214,27 @@ preferences_window['draw_Appearance and rendering'] = function()
       main.camera().effect = effect
    end
    gom.set_environment_value('gfx:default_full_screen_effect', effect)
-   if preferences_window.edit_preference_boolean(
-       'Perspective', 'perspective'
-   ) then
-      main.render_area.update_view_parameters()
-   end
    
+   preferences_window.edit_preference_boolean(
+       'Enable undo (saves state before each command)', 'gui:undo'
+   )
+
+   if gom.get_environment_value('gui:undo') == 'true' then
+      local undo_depth = tonumber(gom.get_environment_value('gui:undo_depth'))
+      if undo_depth == nil then
+         undo_depth = 4
+      end
+      imgui.Text('Undo depth')
+      imgui.SameLine()
+      local sel
+      imgui.PushItemWidth(-1)
+      sel,undo_depth = imgui.InputInt('##undo_depth',undo_depth)
+      imgui.PopItemWidth()
+      if sel then
+         gom.set_environment_value('gui:undo_depth',undo_depth)
+      end
+   end
+
 end
 
 -- \brief Draws the 'Startup' pane

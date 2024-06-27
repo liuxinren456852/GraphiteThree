@@ -48,11 +48,14 @@
 #include <geogram/mesh/mesh_geometry.h>
 #include <geogram/mesh/mesh_repair.h>
 #include <geogram/delaunay/LFS.h>
-#include <geogram/basic/stopwatch.h>
 #include <geogram/points/kd_tree.h>
+#include <geogram/basic/stopwatch.h>
+
+#include <stack>
 
 namespace {
-    using namespace GEO;
+    using namespace OGF;    
+    
     /**
      * \brief Creates a random rotation matrix from three parameters.
      * \details Maps three values (x[0], x[1], x[2]) in the range [0,1]   
@@ -120,15 +123,62 @@ namespace {
 	M(1,0) = MM[3]; M(1,1) = MM[4]; M(1,2) = MM[5];
 	M(2,0) = MM[6]; M(2,1) = MM[7]; M(2,2) = MM[8];	
     }
-    
+
 }
 
 namespace OGF {
+
     
     MeshGrobAttributesCommands::MeshGrobAttributesCommands() { 
     }
 
     MeshGrobAttributesCommands::~MeshGrobAttributesCommands() { 
+    }
+
+    void MeshGrobAttributesCommands::create_attribute(
+        const std::string& name,
+        const std::string& where,
+        const std::string& type,
+        index_t dimension
+    ) {
+        MeshElementsFlags where_id = Mesh::name_to_subelements_type(where);
+        if(where_id == MESH_NONE) {
+            Logger::err("Attributes")
+                << where << ": invalid attribute localization"
+                << std::endl;
+            return;
+        }
+        
+        MeshSubElementsStore& elts =
+            mesh_grob()->get_subelements_by_type(where_id);
+
+        if(elts.attributes().is_defined(name)) {
+            Logger::err("Attributes")
+                << name << ": already bound attribute"
+                << std::endl;
+            return;
+        }
+
+        if(type == "int32") {
+            Attribute<Numeric::int32> attr;
+            attr.create_vector_attribute(elts.attributes(),name,dimension);
+        } else if(type == "uint32") {
+            Attribute<Numeric::uint32> attr;
+            attr.create_vector_attribute(elts.attributes(),name,dimension);
+        } else if(type == "float64") {
+            Attribute<double> attr;
+            attr.create_vector_attribute(elts.attributes(),name,dimension);
+        } else if(type == "bool") {
+            Attribute<bool> attr;
+            attr.create_vector_attribute(elts.attributes(),name,dimension);
+        } else {
+            Logger::err("Attributes")
+                << type << ": invalid attribute type"
+                << std::endl;
+            return;
+        }
+
+        show_attribute(where + "." + name);
     }
     
     void MeshGrobAttributesCommands::delete_attribute(
@@ -175,6 +225,8 @@ namespace OGF {
         mgr.delete_attribute_store(attribute_name);
         mesh_grob()->update();
     }
+
+    /*************************************************************************/
     
     void MeshGrobAttributesCommands::compute_sub_elements_id(
         MeshElementsFlags what,
@@ -186,6 +238,7 @@ namespace OGF {
         for(index_t i=0; i<store.nb(); ++i) {
             attribute[i] = i;
         }
+	show_attribute(Mesh::subelements_type_to_name(what)+"."+attribute_name);
         mesh_grob()->update();
     }
     
@@ -202,10 +255,47 @@ namespace OGF {
     }
     
     void MeshGrobAttributesCommands::compute_facets_id(
-        const std::string& attribute) {
+        const std::string& attribute
+    ) {
         compute_sub_elements_id(MESH_FACETS, attribute);        
     }
 
+    void MeshGrobAttributesCommands::compute_chart_id(
+        const std::string& attribute
+    ) {
+        Attribute<index_t> chart(
+            mesh_grob()->facets.attributes(), attribute
+        );
+        for(index_t f: mesh_grob()->facets) {
+            chart[f] = index_t(-1);
+        }
+        std::stack<index_t> S;
+        index_t cur_chart = 0;
+        for(index_t f: mesh_grob()->facets) {
+            if(chart[f] == index_t(-1)) {
+                chart[f] = cur_chart;
+                S.push(f);
+                while(!S.empty()) {
+                    index_t g = S.top();
+                    S.pop();
+                    for(
+                        index_t le=0;
+                        le<mesh_grob()->facets.nb_vertices(g); ++le
+                    ) {
+                        index_t h = mesh_grob()->facets.adjacent(g,le);
+                        if(h != index_t(-1) && chart[h] == index_t(-1)) {
+                            chart[h] = cur_chart;
+                            S.push(h);
+                        }
+                    }
+                }
+                ++cur_chart;
+            }
+        }
+	show_charts(attribute);
+    }
+
+    
     void MeshGrobAttributesCommands::compute_cells_id(
         const std::string& attribute) {
         compute_sub_elements_id(MESH_CELLS, attribute);                
@@ -241,6 +331,7 @@ namespace OGF {
 	    }
 	);
         surface->unlock_graphics();
+	show_attribute("vertices."+attribute_name);
         mesh_grob()->update();
     }
 
@@ -272,7 +363,7 @@ namespace OGF {
 		);
 	    }
 	);
-        
+	show_attribute("vertices."+attribute_name);
         mesh_grob()->update();
     }
 
@@ -332,7 +423,7 @@ namespace OGF {
                 mat4 M;
                 M.load_identity();
 		rand_rotation(M);
-		M(3,3) = 2.0; // shrink it a little bit (* 0.5) to make it fit in
+		M(3,3) = 2.0; // shrink it a little bit (*0.5) to make it fit in
                               // the screen even when it is rotated.
 		
                 glupTranslated(c.x, c.y, c.z);
@@ -391,6 +482,8 @@ namespace OGF {
         for(index_t f=0; f<mesh_grob()->facets.nb(); ++f) {
             visibility[f] /= vismax;
         }
+
+	show_attribute("facets.visibility");
     }
 
     namespace {
@@ -508,13 +601,15 @@ namespace OGF {
 	);
 	
 	surface->update();
+	show_colors();
 	mesh_grob()->update();
     }
     
 /************************************************************************/
 
     void MeshGrobAttributesCommands::compute_ambient_occlusion(
-	const std::string& attribute, index_t nb_rays_per_vertex 
+	const std::string& attribute, index_t nb_rays_per_vertex,
+	index_t nb_smoothing_iter
     ) {
 	Attribute<double> AO(mesh_grob()->vertices.attributes(), attribute);
 	MeshFacetsAABB AABB(*mesh_grob());
@@ -525,28 +620,18 @@ namespace OGF {
 		double ao = 0.0;
 		vec3 p(mesh_grob()->vertices.point_ptr(v));
 		for(index_t i=0; i<nb_rays_per_vertex; ++i) {
-
+		    // https://math.stackexchange.com/questions/1585975/
+		    //   how-to-generate-random-points-on-a-sphere	
+		    double u1 = Numeric::random_float64();
+		    double u2 = Numeric::random_float64();
+		    double theta = 2.0 * M_PI * u2;
+		    double phi = acos(2.0 * u1 - 1.0) - M_PI / 2.0;
 		    vec3 d(
-			2.0 * (Numeric::random_float64() - 0.5),
-			2.0 * (Numeric::random_float64() - 0.5),
-			2.0 * (Numeric::random_float64() - 0.5)			
+			cos(theta)*cos(phi),
+			sin(theta)*cos(phi),
+			sin(phi)
 		    );
-
-		    d = normalize(d);
-		    
-		    /*
-		    double theta = Numeric::random_float64() * 2.0 * M_PI;
-		    double z = 2.0 * (Numeric::random_float64() - 0.5);
-		    double r = ::sqrt(1.0 - z*z);
-		    vec3 d(r*cos(theta), r*sin(theta), z);
-		    */
-		    
-		    double t;
-		    index_t f;
-
-		    if(!AABB.segment_nearest_intersection(
-			 p + 1e-3*d, p + 1e3*d, t, f
-		    )) {
+		    if(!AABB.ray_intersection(Ray(p + 1e-3*d, d))) {
 			ao += 1.0;
 		    }
 		}
@@ -554,7 +639,31 @@ namespace OGF {
 		AO[v] = ao;
 	    }
 	);
-	
+
+	vector<double> next_val;
+	vector<index_t> degree;
+	for(index_t i=0; i<nb_smoothing_iter; ++i) {
+	    next_val.assign(mesh_grob()->vertices.nb(),0.0);
+	    degree.assign(mesh_grob()->vertices.nb(),1);
+	    for(index_t v: mesh_grob()->vertices) {
+		next_val[v] = AO[v];
+	    }
+	    for(index_t f: mesh_grob()->facets) {
+		index_t d = mesh_grob()->facets.nb_vertices(f);
+		for(index_t lv=0; lv < d; ++lv) {
+		    index_t v1 = mesh_grob()->facets.vertex(f,lv);
+		    index_t v2 = mesh_grob()->facets.vertex(f,(lv + 1) % d);
+		    degree[v1]++;
+		    degree[v2]++;
+		    next_val[v1] += AO[v2];
+		    next_val[v2] += AO[v1];
+		}
+	    }
+	    for(index_t v: mesh_grob()->vertices) {
+		AO[v] = next_val[v] / double(degree[v]);
+	    }
+	}
+	show_attribute("vertices."+attribute);
 	mesh_grob()->update();
     }
 

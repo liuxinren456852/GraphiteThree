@@ -69,7 +69,7 @@ namespace OGF {
 	}
 	
         /**
-         * \brief Color used to draw the object.
+         * \brief surface color.
          */
         const Color& get_color() const {
             return color_;
@@ -80,6 +80,20 @@ namespace OGF {
             update();
         }
 
+	/**
+	 * \brief opaque core color.
+	 */
+
+	const Color& get_core_color() const {
+	    return core_color_;
+	}
+
+	void set_core_color(const Color& x) {
+	    core_color_ = x;
+	    update();
+	}
+
+	
 	/**
 	 * \brief Specular intensity.
 	 */
@@ -145,6 +159,19 @@ namespace OGF {
 	}
 
 	/**
+	 * \brief XRay mode
+	 */
+	bool get_xray() const {
+	    return xray_ ;
+	}
+
+	void set_xray(bool x) {
+	    xray_ = x;
+	    update();
+	}
+
+
+	/**
 	 * \brief Refraction index.
 	 */
 	double get_refract_index() const {
@@ -203,6 +230,7 @@ namespace OGF {
 	void set_show_stats(bool x) {
 	    show_stats_ = x;
 	}
+
 	
     gom_slots:
 	/**
@@ -371,6 +399,9 @@ namespace OGF {
 	Mesh background_mesh_;
 	Attribute<double> background_mesh_color_;
 	MeshFacetsAABB background_mesh_AABB_;
+
+	bool xray_;
+	Color core_color_;
 	
 	GLuint texture_;
 	MeshFacetsAABB AABB_;

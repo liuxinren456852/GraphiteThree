@@ -46,6 +46,7 @@
 
 #include <geogram/image/image.h>
 #include <geogram/image/image_library.h>
+#include <geogram/basic/command_line.h>
 
 namespace OGF {
 
@@ -62,6 +63,12 @@ namespace OGF {
     Shader::~Shader() {
     }
 
+    void Shader::draw() {
+        glupGetMatrixdv(GLUP_MODELVIEW_MATRIX, modelview_);
+        glupGetMatrixdv(GLUP_PROJECTION_MATRIX, project_);
+        glGetIntegerv(GL_VIEWPORT, viewport_);
+    }
+    
     bool Shader::get_multi() const { 
         return multi_ ; 
     }
@@ -83,6 +90,11 @@ namespace OGF {
     void Shader::blink() {
     }
 
+    bool Shader::dark_mode() const {
+        std::string gui_mode = CmdLine::get_arg("gui:style");
+        return gui_mode == "Dark";
+    }
+    
     Texture* Shader::create_texture_from_file(
         const std::string& file_name, GLint filtering, GLint wrapping         
     ) {

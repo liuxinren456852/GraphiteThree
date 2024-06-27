@@ -129,6 +129,15 @@ namespace OGF {
         }
 
         /**
+         * \brief Creates an object of this class.
+         * \param args the parameters to be passed to the constructor.
+         *  The constructor that best matches the parameters list is selected.
+         * \return the created object, or nullptr if no matching constructor was
+         *  found or if the class is abstract.
+         */
+        Object* create(const ArgList& args);
+        
+        /**
          * \brief Gets the number of class members.
          * \details Class members are constructors,
          *  signals, slots or properties.
@@ -270,6 +279,18 @@ namespace OGF {
             const std::string& property_name, bool super = true 
         ) const;
 
+        /**
+         * \brief Creates a new subclass dynamically
+         * \param[in] name the name of the subclass to be created
+         * \param[in] is_abstract true if the class is abstract, that is, if
+         *  no object of this class can be created
+         * \return the newly created subclass
+         * \details To be used in scripts that create new classes dynamically
+         */
+        virtual MetaClass* create_subclass(
+            const std::string& name, bool is_abstract=false
+        );
+        
     public:
         
         /**
@@ -396,10 +417,10 @@ namespace OGF {
 
         /**
          * \brief Gets the factory.
-         * \return a pointer to the factory associated with this class, or nullptr
-         *  if there is no factory. The returned factory is typically a 
-         *  FactoryMetaClass, that selects the best constructor according to
-         *  the arguments.
+         * \return a pointer to the factory associated with this class, 
+         *  or nullptr if there is no factory. 
+         *  The returned factory is typically a FactoryMetaClass, 
+         *  that selects the best constructor according to the arguments.
          */
         Factory* factory() const {
             return factory_;
@@ -414,6 +435,17 @@ namespace OGF {
             factory_ = f;
         }
 
+        /**
+         * \copydoc Object::search()
+         */
+        void search(const std::string& needle, const std::string& path = "") override;
+
+        /**
+         * \copydoc Object::get_doc()
+         */
+        std::string get_doc() const override;
+        
+        
     protected:
 
         /**
@@ -490,7 +522,7 @@ namespace OGF {
      */
     typedef SmartPointer<MetaClass> MetaClass_var;   
 
-    //____________________________________________________________________
+    /*******************************************************************/
 
     /**
      * \brief A Factory that uses a MetaClass. 
@@ -526,6 +558,7 @@ namespace OGF {
         MetaClass* meta_class_;
     };
 
+    /*******************************************************************/
 }
 #endif 
 

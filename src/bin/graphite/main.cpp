@@ -266,13 +266,18 @@ namespace {
         Preferences::declare_preference_variable(
 	    "gui:tooltips", true, "Display tooltips on commands and arguments"
 	);	    
-	
+
+        Preferences::declare_preference_variable(
+	    "gui:undo", false, "Support undo for all commands"
+	);	    
+
+        Preferences::declare_preference_variable(
+	    "gui:undo_depth", 4, "number of memorized states for undo"
+	);	    
+        
         Preferences::declare_preference_variable(
 	    "gfx:default_full_screen_effect", "Plain",
 	    "full-screen effect enabled by default"
-	);
-        Preferences::declare_preference_variable(
-	    "gfx:perspective", false, "Orthographic or perspective view"
 	);
         Preferences::declare_preference_variable("gfx:GL_debug");
         Preferences::declare_preference_variable("gfx:GL_profile");
@@ -289,7 +294,7 @@ namespace {
 	Preferences::declare_preference_variable("gfx:full_screen");
        
         Preferences::declare_preference_variable(
-	      "gui:keyboard_nav",false,"keyboard navigation"
+	      "gui:keyboard_nav",true,"keyboard navigation"
 	);
         Preferences::declare_preference_variable(
 	      "gui:viewports",false,"individual dockable windows for dialogs"

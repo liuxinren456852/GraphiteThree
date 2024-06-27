@@ -127,6 +127,14 @@ namespace OGF {
 
         // Properties and Dynamic invokation interface
 
+	/**
+	 * \brief Tests whether a method is defined
+         * \param[in] method_name name of the property
+         * \retval true if this Object has the method
+         * \retval false otherwise
+         */
+	bool has_method(const std::string& method_name) const;
+	
         /**
          * \brief Invokes a method by method name and argument list,
          *  and gets the return value.
@@ -171,6 +179,14 @@ namespace OGF {
             return invoke_method(method_name, args, ret_val);
         }
 
+	/**
+	 * \brief Tests whether a property is defined
+         * \param[in] prop_name name of the property
+         * \retval true if this Object has the property
+         * \retval false otherwise
+         */
+	bool has_property(const std::string& prop_name) const;
+	
         /**
          * \brief Gets a property
          * \param[in] prop_name name of the property
@@ -237,7 +253,16 @@ namespace OGF {
 	 * \param[in] value the element at index i.
 	 */
 	virtual void set_element(index_t i, const Any& value);
-	
+
+        /**
+         * \brief Displays the names of all objects that
+         *   contain a substring
+         * \param[in] needle the substring
+         * \param[in] path the path to be prepended to the names
+         */
+        virtual void search(
+            const std::string& needle, const std::string& path=""
+        );
 	
     gom_properties:
 
@@ -302,7 +327,15 @@ namespace OGF {
 	std::string get_string_id() const {
 	    return string_id();
 	}
-	
+
+        /**
+         * \brief Gets the documentation.
+         * \return A string with a human-readable documentation 
+         *  about this object.
+         */
+        virtual std::string get_doc() const;
+
+        
     gom_slots:
 
 	/**
@@ -358,6 +391,12 @@ namespace OGF {
             const std::string& name, const std::string& value
         );
 
+        /**
+         * \brief Displays some help about this object
+         * \details Outputs the doc property to the logger.
+         */
+        void help() const;
+        
       public:
 	// Note: set_property() variants that are not slots
 	// need to be declared *after* the set_property() slot
@@ -384,8 +423,6 @@ namespace OGF {
         virtual bool get_property(
             const std::string& prop_name, Any& prop_value
         ) const;
-	
-
 	
     protected:
 

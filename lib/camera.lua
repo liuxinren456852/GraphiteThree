@@ -11,6 +11,8 @@ translation = gom.create('OGF::Translation')
 -- Note that xform is also accessed in the code
 -- that saves global viewing parameters.
 
+-- see OGF/skin/types/events.h for mouse button mapping
+
 camera = main.camera()
 
 gom.connect(
@@ -67,6 +69,17 @@ gom.connect(main.render_area.mouse_move, xform.zoom_in)
    .if_arg('shift', false)
    .rename_arg('delta_y_ndc', 'value')
 
+gom.connect(main.render_area.mouse_move, xform.zoom_in)
+   .if_arg('button', 4)
+   .if_arg('control', true)
+   .if_arg('shift', false)
+   .rename_arg('delta_y_ndc', 'value')
+
+gom.connect(main.render_area.mouse_move, xform.zoom_in)
+   .if_arg('button', 5)
+   .if_arg('control', true)
+   .if_arg('shift', false)
+   .rename_arg('delta_y_ndc', 'value')
 
 camera_gui = {}
 camera_gui.name = 'Camera'
@@ -81,6 +94,7 @@ function camera_gui.backgrounds()
      local size = 2*autogui.icon_size()
 
      if imgui.ImageButton(
+       'cam_bkgnd_white',
        main.resolve_icon('backgrounds/white'),
        size,size
      ) then
@@ -88,6 +102,7 @@ function camera_gui.backgrounds()
      end
      imgui.SameLine()
      if imgui.ImageButton(
+       'cam_bkgnd_blue-white',
        main.resolve_icon('backgrounds/blue-white'),
        size,size
      ) then
@@ -97,6 +112,7 @@ function camera_gui.backgrounds()
      end
      imgui.SameLine()     
      if imgui.ImageButton(
+       'cam_bkgnd_blue-black',
        main.resolve_icon('backgrounds/blue-black'),
        size,size
      ) then
@@ -106,6 +122,7 @@ function camera_gui.backgrounds()
      end
      imgui.SameLine()     
      if imgui.ImageButton(
+       'cam_bkgnd_black',     
        main.resolve_icon('backgrounds/black'),
        size,size
      ) then
@@ -129,6 +146,10 @@ end
 camera_gui.snapshot_filename = ''
 
 function camera_gui.draw_menu()
+  if imgui.Button(imgui.font_icon('home')..' Home',-1,0) then
+     camera_gui.home()
+  end
+  imgui.Separator()
   if imgui.BeginMenu('Properties...') then
      autogui.properties_editor(main.camera())
      imgui.EndMenu()
@@ -169,6 +190,10 @@ function camera_gui.draw_menu()
      end
      imgui.EndMenu()
   end
+  imgui.Separator()
+  imgui.NewLine()
+  camera_gui.projection_dialog()
+  imgui.NewLine()  
 end
 
 function camera_gui.draw_extra()
@@ -202,7 +227,7 @@ autogui.handlers['OGF::ClippingConfig'] =
    local rotation = words[5]
    local invert = (words[6] == 'true')
 
-   local sel1,sel2,sel3,sel4,sel6, sel7
+   local sel1,sel2,sel3,sel4,sel6,sel7
 
    sel1,active = imgui.Checkbox('##active##'..property_name,active)
    imgui.SameLine()   
@@ -257,5 +282,78 @@ autogui.handlers['OGF::ClippingConfig'] =
    end
 end
 
-graphite_main_window.add_module(camera_gui)
+function camera_gui.home()
+    scene_graph.scene_graph_shader_manager.update_focus()
+    xform.reset()
+end
 
+function camera_gui.projection(axis)
+    camera_gui.home()
+    if(    axis == '+X') then
+       xform.rotation_matrix = ' 0 0  1 0   0 1  0 0  -1  0  0 0   0 0 0 1'    
+    elseif(axis == '-X') then
+       xform.rotation_matrix = ' 0 0 -1 0   0 1  0 0   1  0  0 0   0 0 0 1'    
+    elseif(axis == '+Y') then
+       xform.rotation_matrix = ' 1 0  0 0   0 1  0 0   0  0  1 0   0 0 0 1'
+    elseif(axis == '-Y') then
+       xform.rotation_matrix = '-1 0  0 0   0 1  0 0   0  0 -1 0   0 0 0 1'
+    elseif(axis == '+Z') then
+       xform.rotation_matrix = ' 1 0  0 0   0 0  1 0   0 -1  0 0   0 0 0 1'    
+    elseif(axis == '-Z') then
+       xform.rotation_matrix = ' 1 0  0 0   0 0 -1 0   0  1  0 0   0 0 0 1'
+    end       
+end
+
+function camera_gui.projection_dialog()
+    local r,g,b
+
+    if gom.get_environment_value('gui:style') == 'Dark' then
+       r = 0xFF8080FF
+       g = 0xFF80FF80
+       b = 0xFFFF8080
+    else
+       r = 0xFF0000FF
+       g = 0xFF00FF00
+       b = 0xFFFF0000
+    end
+
+    local ImGuiStyleVar_FrameRounding = 12
+    imgui.PushStyleVar(ImGuiStyleVar_FrameRounding,0)
+
+    function axis_button(axis,color)
+       imgui.PushStyleColor(ImGuiCol_Text,color)
+       if imgui.Button(axis,30,0) then
+          camera_gui.projection(axis)
+       end
+       imgui.PopStyleColor()
+    end
+
+    local offset = 45
+        if(imgui.GetWindowWidth() > 20) then
+       offset = offset + (imgui.GetWindowWidth() - 120)/2
+    end
+
+    imgui.Text(' ')
+    imgui.SameLine(offset)
+    axis_button('+Z',b)
+    imgui.NewLine()
+ 
+    imgui.SameLine(offset-37)
+    axis_button('-X',r)
+    imgui.SameLine(offset)
+    axis_button('+Y',g)
+    imgui.SameLine(offset+37)
+    axis_button('+X',r)
+
+    imgui.Text(' ')
+    imgui.SameLine(offset)
+    axis_button('-Z',b)
+
+    imgui.Text(' ')
+    imgui.SameLine(offset)
+    axis_button('-Y',g)
+
+    imgui.PopStyleVar()
+end
+
+graphite_main_window.add_module(camera_gui)

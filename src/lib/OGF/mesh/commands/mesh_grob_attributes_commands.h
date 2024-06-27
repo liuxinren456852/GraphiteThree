@@ -49,6 +49,7 @@
 
 namespace OGF {
 
+    
    /**
     * \brief Commands that manipulate mesh attributes.
     */
@@ -68,14 +69,34 @@ namespace OGF {
     gom_slots:
 
         /**
+         * \brief Creates an attribute.
+         * \param[in] name name of the attribute, without the localisation.
+         * \param[in] where which mesh elements the attribute should 
+         *  be attached to.
+         * \param[in] type attribute type
+         * \param[in] dimension number of components (1 for scalar)
+         */
+	gom_arg_attribute(where, handler, "combo_box")
+	gom_arg_attribute(where, values, "vertices;edges;facets;cells")
+	gom_arg_attribute(type, handler, "combo_box")
+	gom_arg_attribute(type, values, "bool;uint32;int32;float64")
+        void create_attribute(
+            const std::string& name,
+            const std::string& where = "points",
+            const std::string& type  = "float64",
+            index_t dimension = 1
+        );
+        
+        /**
          * \brief Deletes an attribute.
          * \param[in] name the name of the attribute, 
          *   for instance "vertices.distance
          */
 	gom_arg_attribute(name, handler, "combo_box")
-	gom_arg_attribute(name, values, "grob.attributes")
+	gom_arg_attribute(name, values, "$grob.attributes")
         void delete_attribute(const std::string& name);
-        
+
+
         /**
          * \brief Stores the vertices ids in an attribute.
          * \param[in] attribute the name of the vertex attribute
@@ -98,6 +119,13 @@ namespace OGF {
          */
         void compute_facets_id(const std::string& attribute="id");
 
+        /**
+         * \brief Stores the chart (connected component) id in an attribute.
+         * \param[in] attribute the name of the facet attribute
+         * \menu Facets
+         */
+        void compute_chart_id(const std::string& attribute="chart");
+        
         /**
          * \brief Computes facets visibility from random views.
          * \param[in] nb_views number of views
@@ -139,7 +167,7 @@ namespace OGF {
             const MeshGrobName& surface,            
             const std::string& attribute="lfs"
         );
-
+	
 	/**
 	 * \brief Copies colors from a textured surface.
 	 * \param[in] surface the surface mesh
@@ -159,11 +187,14 @@ namespace OGF {
          * \param[in] attribute the name of the vertex attribute
 	 * \param[in] nb_rays_per_vertex number of rays used to 
 	 *  sample directions. The higher, the more precise.
+	 * \param[in] nb_smoothing_iterations blur the result
+	 *  a little bit to hide sampling noise
          * \menu Vertices
          */
         void compute_ambient_occlusion(
             const std::string& attribute="AO",
-	    index_t nb_rays_per_vertex = 100
+	    index_t nb_rays_per_vertex = 100,
+	    index_t nb_smoothing_iterations = 2
         );
 
 	
@@ -173,6 +204,7 @@ namespace OGF {
         void compute_sub_elements_id(
             MeshElementsFlags what, const std::string& attribute
         );
+
     };
     
 }

@@ -46,7 +46,6 @@
 #include <geogram/basic/file_system.h>
 #include <geogram/basic/line_stream.h>
 #include <geogram/basic/command_line.h>
-// #include <geogram/third_party/gzstream/gzstream.h>
 
 #include <vector>
 #include <fstream>
@@ -54,22 +53,43 @@
 
 namespace OGF {
 
+    ApplicationBase* ApplicationBase::instance_ = nullptr;
     bool ApplicationBase::stopping_ = true;
     
     ApplicationBase::ApplicationBase(Interpreter* interpreter) :
 	interpreter_(interpreter)
     {
+        geo_assert(instance_ == nullptr);
+        instance_ = this;
 	logger_client_ = new ApplicationBaseLoggerClient(this);
 	progress_client_ = new ApplicationBaseProgressClient(this);
 	Logger::instance()->register_client(logger_client_);
 	Progress::set_client(progress_client_);
+        state_buffer_size_    = CmdLine::get_arg_uint("gui:undo_depth");
+        state_buffer_begin_   = 0;
+        state_buffer_end_     = 0;
+        state_buffer_current_ = 0;
+        undo_redo_called_ = false;
     }
 
     ApplicationBase::~ApplicationBase() {
+        
+        // Cleanup saved states for undo and redo
+        if(Environment::instance()->get_value("gui:undo") == "true") {
+            for(index_t i=0; i<state_buffer_size_; ++i) {
+                std::string filename = state_buffer_filename(i);
+                if(FileSystem::is_file(filename)) {
+                    FileSystem::delete_file(filename);
+                }
+            }
+        }
+        
+        geo_assert(instance_ == this);
 	if(logger_client_ != nullptr) {
 	    Logger::instance()->unregister_client(logger_client_);
 	}
 	Progress::set_client(nullptr);
+        instance_ = nullptr;
     }
 
     void ApplicationBase::start() {
@@ -143,13 +163,15 @@ namespace OGF {
     }
 
     void ApplicationBase::begin() {
-        const std::string& task_name = Progress::current_task()->task_name();
+        const std::string& task_name =
+            Progress::current_progress_task()->task_name();
         Logger::out(task_name) << "Running..." << std::endl;
         notify_progress_begin(task_name);
     }
 
     void ApplicationBase::end(bool canceled) {
-        const std::string& task_name = Progress::current_task()->task_name();
+        const std::string& task_name =
+            Progress::current_progress_task()->task_name();
         if(canceled) {
             Logger::out(task_name) << "interrupted." << std::endl;
             notify_progress(0);
@@ -169,6 +191,102 @@ namespace OGF {
     }
 
     void ApplicationBase::update() {
+    }
+
+    
+    void ApplicationBase::save_state_to_file(const std::string& filename) {
+        if(Environment::instance()->get_value("gui:undo") != "true") {
+            return;
+        }
+        // If latest command is undo or redo, state is already saved
+        if(undo_redo_called_) {
+            undo_redo_called_ = false;
+            return;
+        }
+
+        Object* scene_graph = interpreter()->resolve_object("scene_graph");
+        if(scene_graph != nullptr) {
+            ArgList args;
+            args.create_arg("value",filename);
+            scene_graph->invoke_method("save", args);
+        }
+    }
+    
+    void ApplicationBase::load_state_from_file(const std::string& filename) {
+        if(Environment::instance()->get_value("gui:undo") != "true") {
+            return;
+        }
+        if(!FileSystem::is_file(filename)) {
+            Logger::err("App") << "No saved state to restore"
+                               << std::endl;
+            return;
+        }
+
+        Object* scene_graph = interpreter()->resolve_object("scene_graph");
+        if(scene_graph != nullptr) {
+            ArgList args;
+            scene_graph->invoke_method("clear",args);
+            args.create_arg("value",filename);
+            scene_graph->invoke_method("load_object", args);
+        }
+    }
+
+    std::string ApplicationBase::state_buffer_filename(index_t i) const {
+        return String::format("graphite_state_%02d.graphite",int(i));
+    }
+
+    bool ApplicationBase::get_can_undo() const {
+        return (state_buffer_current_ != state_buffer_begin_);
+    }
+
+    bool ApplicationBase::get_can_redo() const {
+        return (state_buffer_current_ != state_buffer_end_);
+    }
+
+
+    void ApplicationBase::save_state() {
+        if(Environment::instance()->get_value("gui:undo") != "true") {
+            return;
+        }
+        
+        save_state_to_file(state_buffer_filename(state_buffer_current_));
+        state_buffer_current_ = (state_buffer_current_ + 1) % state_buffer_size_;
+        state_buffer_end_ = state_buffer_current_;
+        if(state_buffer_current_ == state_buffer_begin_) {
+            state_buffer_begin_ = (state_buffer_begin_+1) % state_buffer_size_;
+        }
+    }
+    
+    void ApplicationBase::undo() {
+        if(Environment::instance()->get_value("gui:undo") != "true") {
+            return;
+        }
+        if(!get_can_undo()) {
+            return;
+        }
+
+
+        // Make it possible to call redo()
+        if(state_buffer_current_ == state_buffer_end_) {
+            save_state_to_file(state_buffer_filename(state_buffer_current_));
+        }
+        
+        state_buffer_current_ =
+            (state_buffer_current_ + state_buffer_size_ - 1) % state_buffer_size_;
+        load_state_from_file(state_buffer_filename(state_buffer_current_));
+        undo_redo_called_ = true;
+    }
+
+    void ApplicationBase::redo() {
+        if(Environment::instance()->get_value("gui:undo") != "true") {
+            return;
+        }
+        if(!get_can_redo()) {
+            return;
+        }
+        state_buffer_current_ = (state_buffer_current_ + 1) % state_buffer_size_;
+        load_state_from_file(state_buffer_filename(state_buffer_current_));
+        undo_redo_called_ = true;
     }
 
 /**************************************************************/

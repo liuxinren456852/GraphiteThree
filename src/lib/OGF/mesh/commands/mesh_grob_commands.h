@@ -74,6 +74,79 @@ namespace OGF {
         MeshGrob* mesh_grob() const {
             return dynamic_cast<MeshGrob*>(grob());
         }
+
+    protected:
+
+        /**
+         * \brief Hides an attribute shown by show_attribute().
+         */
+        virtual void hide_attribute();
+        
+	/**
+	 * \brief Shows an attribute.
+	 * \param[in] attribute_name the name of the attribute to be
+	 *  displayed, prefixed by the element (e.g., "vertices.density").
+	 * \param[in] M an optional pointer to a MeshGrob
+	 */
+	virtual void show_attribute(
+	    const std::string& attribute_name, MeshGrob* M = nullptr
+	);
+
+
+	/**
+	 * \brief Shows the charts, stored in the "chart" facet attribute.
+	 */
+	virtual void show_charts(const std::string& attribute="chart");
+
+	/**
+	 * \brief Shows the mesh.
+	 * \param[in] M an optional pointer to a MeshGrob
+	 */
+	virtual void show_mesh(MeshGrob* M = nullptr);
+
+        /**
+         * \brief Shows or hides the vertices in the current shader.
+         * \param[in] visible true if vertices should be displayed, 
+         *   false otherwise.
+         */
+        virtual void set_vertices_visibility(bool visible);
+
+        /**
+         * \brief Shows the vertices in the current shader.
+         */
+        void show_vertices() {
+            set_vertices_visibility(true);
+        }
+
+        /**
+         * \brief Hides the vertices in the current shader.
+         */
+        void hide_vertices() {
+            set_vertices_visibility(false);
+        }
+
+
+	/** 
+	 * \brief Shows the parameterization of a mesh.
+	 * \param[in] UV_attribute_name optional name of an attribute with
+	 *   the texture coordinates
+	 * \param[in] M an optional pointer to a MeshGrob
+	 */
+	virtual void show_UV(
+	    const std::string& UV_attribute_name = "facet_corners.tex_coord",
+	    MeshGrob* M = nullptr
+	);
+
+	/**
+	 * \brief Shows the colors of a mesh
+	 * \param[in] attribute optional name of the attribute with the colors
+	 * \param[in] M an optional pointer to a MeshGrob
+	 */
+	virtual void show_colors(
+	    const std::string& attribute = "vertices.colors",
+	    MeshGrob* M = nullptr
+	);
+	
     };
 }
 #endif

@@ -77,7 +77,38 @@ namespace OGF {
 	Interpreter* interpreter() {
 	    return interpreter_;
 	}
-	
+
+        static ApplicationBase* instance() {
+            return instance_;
+        }
+
+    gom_properties:
+
+        /**
+         * \brief Sets a tooltip to be displayed near the cursor
+         *  in the rendering area.
+         */
+        void set_tooltip(const std::string& x) {
+            tooltip_ = x;
+            // Interpret "\\n" in string.
+            for(
+                size_t index = tooltip_.find("\\n");
+                index != std::string::npos;
+                index = tooltip_.find("\\n", index+2)
+            ) {
+                tooltip_.replace(index, 2, " \n");
+            }
+        }
+
+        /**
+         * \brief Gets the tooltip to be displayed near the cursor
+         *  in the rendering area, or an empty string if there is
+         *  no tooltip.
+         */
+        const std::string& get_tooltip() const {
+            return tooltip_;
+        }
+        
     gom_slots:
         /**
          * \brief Starts the application.
@@ -196,7 +227,39 @@ namespace OGF {
 	 *  such file was found.
 	 */
 	std::string find_file(const std::string& filename) const;
-	
+
+        /**
+         * \brief Saves state before applying command or tool, for undo()/redo().
+         */
+        virtual void save_state();
+        
+        /**
+         * \brief Restores last saved state if available.
+         */
+        virtual void undo();
+
+        /**
+         * \brief Restores next saved state if available.
+         */
+        virtual void redo();
+
+    gom_properties:
+
+        /**
+         * \brief Tests whether undo() can be called
+         * \retval true if undo is activated and there is a saved state
+         * \false otherwise
+         */
+        bool get_can_undo() const;
+
+
+        /**
+         * \brief Tests whether redo() can be called
+         * \retval true if undo is activated and there is a saved state
+         * \false otherwise
+         */
+        bool get_can_redo() const;
+        
     gom_signals:
         /**
          * \brief A signal that is triggered after the Graphite
@@ -276,6 +339,27 @@ namespace OGF {
 	
     protected:
 
+        /**
+         * \brief Saves Graphite state to a file.
+         */
+        virtual void save_state_to_file(const std::string& filename);
+
+        /**
+         * \brief Saves Graphite state to a file.
+         */
+        virtual void load_state_from_file(const std::string& filename);
+
+
+        /**
+         * \brief Gets the file name to be used to store a state buffer.
+         * \details Used by undo() / redo(). State buffers are stored as .graphite
+         *  files, that store the scene graph and the complete state of Graphite.
+         * \param[in] i the index of the state buffer
+         * \return the file name to be used to store or retreive the state buffer.
+         */
+        std::string state_buffer_filename(index_t i) const;
+
+        
 	/**
 	 * \brief Indicates that the application is stopping, i.e. processes
 	 *  the last events from the event queue.
@@ -354,7 +438,15 @@ namespace OGF {
 	Interpreter* interpreter_;
         LoggerClient_var logger_client_;
         ProgressClient_var progress_client_;
+        std::string tooltip_;
 
+        index_t state_buffer_begin_;
+        index_t state_buffer_end_;
+        index_t state_buffer_size_;
+        index_t state_buffer_current_;
+        bool undo_redo_called_;
+        
+        static ApplicationBase* instance_;
 	static bool stopping_;
     };
 

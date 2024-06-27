@@ -40,6 +40,7 @@
 
 #include <OGF/renderer/common/common.h>
 #include <OGF/renderer/context/texture.h>
+#include <OGF/renderer/context/overlay.h>
 #include <geogram/image/image.h>
 #include <geogram_gfx/full_screen_effects/full_screen_effect.h>
 #include <geogram_gfx/basic/GL.h>
@@ -424,9 +425,15 @@ namespace OGF {
          * \param[out] image The image, it should have the same size as 
 	 *  this RenderingContext and should be in RGB mode.
 	 * \param[in] make_current if true, makes this rendering context
-	 *  the current rendering context without reading the pixels.
+	 *  the current rendering context before reading the pixels.
+         * \param[in] x0 , y0 , width , height optional image bounds. If let
+         *  unspecified, the entire picking buffer is copied.
          */
-        virtual void snapshot(Image* image, bool make_current=true);
+        virtual void snapshot(
+            Image* image, bool make_current=true,
+            index_t x0=0, index_t y0=0,
+            index_t width=0, index_t height=0
+        );
 
         /**
          * \brief Gets the OpenGL vendor.
@@ -604,7 +611,16 @@ namespace OGF {
 	bool contains_picking_image() const {
 	    return last_frame_was_picking_;
 	}
-	
+
+        /**
+         * \brief Gets the Overlay
+         * \details The Overlay has a couple of basic drawing primitives for
+         *  displaying graphics over the rendering window.
+         */
+        Overlay& overlay() {
+            return overlay_;
+        }
+        
     protected:
 
         /**
@@ -733,7 +749,7 @@ namespace OGF {
          */
         void get_picked_point();
 
-        
+
     protected:
         
         static RenderingContext* current_;
@@ -823,7 +839,9 @@ namespace OGF {
         bool use_ES_profile_;
 
 	bool transparent_;
-	
+
+        Overlay overlay_;
+        
 	friend class RenderArea;
     };
 

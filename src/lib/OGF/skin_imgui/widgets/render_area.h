@@ -38,6 +38,8 @@
 #define H_SKIN_IMGUI_RENDER_AREA_H
 
 #include <OGF/skin_imgui/common/common.h>
+#include <OGF/skin/types/events.h>
+#include <OGF/skin/transforms/ray_picker.h>
 #include <OGF/renderer/context/rendering_context.h>
 #include <OGF/gom/types/node.h>
 
@@ -54,6 +56,7 @@ namespace OGF {
      */
     gom_class SKIN_IMGUI_API RenderArea : public Object {
     public:
+
         /**
          * \brief RenderArea constructor.
          * \param[in] w , h window width and height in pixels.
@@ -118,9 +121,13 @@ namespace OGF {
 	 * \param[in] make_current if true, makes the associated
 	 *  rendering context current, else use the current 
 	 *  rendering context.
+         * \param[in] with_gui if set, the gui of graphite is
+         *  rendereed in the image with the 3D objects, else
+         *  only the 3D objects are rendered
 	 */
 	void snapshot(
-	    const std::string& filename, bool make_current = true
+	    const std::string& filename, bool make_current = true,
+            bool with_gui = false
 	);
 
 	/**
@@ -341,7 +348,7 @@ namespace OGF {
          * \param[in] point_ndc the picked point, in normalized device
          *  coordinates
          * \param[in] point_wc the picked point, in world coordinates
-         * \param[in] button the pushed button, in 1,2,3
+         * \param[in] button the pushed button (see MouseButton)
          * \param[in] control true if the control key is pushed
          * \param[in] shift true if the shift key is pushed
          */
@@ -365,7 +372,7 @@ namespace OGF {
          * \param[in] delta_y_ndc the y component of the displacement vector
          *  in normalized device coordinates
          * \param[in] delta_wc the displacement vector in world coordinates
-         * \param[in] button the pushed button, in 1,2,3
+         * \param[in] button the pushed button (see MouseButton)
          * \param[in] control true if the control key is pushed
          * \param[in] shift true if the shift key is pushed
          */
@@ -384,7 +391,7 @@ namespace OGF {
          * \param[in] point_ndc the picked point, in normalized device
          *  coordinates
          * \param[in] point_wc the picked point, in world coordinates
-         * \param[in] button the pushed button, in 1,2,3
+         * \param[in] button the pushed button (see MouseButton)
          * \param[in] control true if the control key is pushed
          * \param[in] shift true if the shift key is pushed
          */
@@ -413,14 +420,14 @@ namespace OGF {
         /**
          * \brief A signal that is triggered each time a mouse button
          *  is pressed.
-         * \param[in] value the button, in 1,2,3
+         * \param[in] value the button (see MouseButton)
          */
         void button_down(int value);
 
         /**
          * \brief A signal that is triggered each time a mouse button
          *  is released.
-         * \param[in] value the button, in 1,2,3
+         * \param[in] value the button (see MouseButton)
          */
         void button_up(int value);
 
@@ -432,26 +439,13 @@ namespace OGF {
          */
         void dropped_file(const std::string& value);
 
-      public:
-	void mouse_button_callback(
-	    int button, int action, int mods
-	);
-
-	void scroll_callback(
-	    double xoffset, double yoffset
-	);
-
-	void cursor_pos_callback(
-	    double xf, double yf
-	);
-	
+    public:
+	void mouse_button_callback(int button, int action, int mods);
+	void scroll_callback(double xoffset, double yoffset);
+	void cursor_pos_callback(double xf, double yf);
 	void drop_callback(int nb, const char** p);
-
 	void char_callback(unsigned int c);
-	
-	void key_callback(
-	    int key, int scancode, int action, int mods
-	);
+	void key_callback(int key, int scancode, int action, int mods);
 
     protected:
 

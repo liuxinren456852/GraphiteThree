@@ -37,6 +37,7 @@
  
 
 #include <OGF/mesh/shaders/mesh_grob_shader.h>
+#include <OGF/mesh/commands/mesh_grob_filters_commands.h>
 #include <OGF/renderer/context/rendering_context.h>
 #include <OGF/basic/os/file_manager.h>
 
@@ -86,6 +87,7 @@ namespace OGF {
     }
 
     void MeshGrobShader::draw() {
+        Shader::draw();
     }
 
     void MeshGrobShader::pick(MeshElementsFlags what) {
@@ -117,35 +119,39 @@ namespace OGF {
 	tex_normal_mapping_ = false;
 	
         surface_style_.visible = true;
-        surface_style_.color = Color(0.5,0.5,0.5,1.0);
+        surface_style_.color = Color(0.5,0.5,0.5);
+        facets_filter_ = false;
 	culling_mode_ = NO_CULL;
 	specular_ = 2;
 
         two_sided_ = false;
         
         volume_style_.visible = true;
-        volume_style_.color = Color(1.0,1.0,0.0,1.0);
-
+        volume_style_.color = Color(1.0,1.0,0.0);
+        cells_filter_ = false;
+        
         edges_style_.visible = true;
-        edges_style_.color   = Color(0.0,0.0,0.5,1.0);
-        edges_style_.width   = 1;
+        edges_style_.color  = dark_mode() ? Color(0.0,1.0,1.0) : Color(0.0,0.0,0.5);
+        edges_style_.width  = 1;
         
         mesh_style_.visible = false;
-        mesh_style_.color   = Color(0.0,0.0,0.0,1.0);
+        mesh_style_.color   = Color(0.0,0.0,0.0);
         mesh_style_.width   = 1;
 
         border_style_.visible = true;
-        border_style_.color   = Color(0.0,0.0,0.5,1.0);
+        border_style_.color = dark_mode() ? Color(1.0,1.0,1.0) : Color(0.0,0.0,0.5);
         border_style_.width   = 2;
 
         vertices_style_.visible = false;
-        vertices_style_.color   = Color(0.0,1.0,0.0,1.0);
+        vertices_style_.color   = Color(0.0,1.0,0.0);
         vertices_style_.size    = 2;
 
+        vertices_filter_ = false;
+        
 	vertices_transparency_ = 0.0;
 	
         vertices_selection_style_.visible = true;
-        vertices_selection_style_.color   = Color(1.0,0.0,0.0,1.0);
+        vertices_selection_style_.color   = Color(1.0,0.0,0.0);
         vertices_selection_style_.size    = 3;
         
         shrink_ = 0;
@@ -249,11 +255,49 @@ namespace OGF {
                 subelements.attributes(), attribute_name_
             );
             if(attribute.is_bound()) {
-                attribute_min_ = Numeric::max_float64();
-                attribute_max_ = Numeric::min_float64();
-                for(index_t i: subelements) {
-                    attribute_min_ = std::min(attribute_min_, attribute[i]);
-                    attribute_max_ = std::max(attribute_max_, attribute[i]);
+                // If boolean attribute, always use [0,1] range.
+                if(
+                    attribute.element_type() ==
+                                       ReadOnlyScalarAttributeAdapter::ET_UINT8
+                ) {
+                    attribute_min_ = 0.0;
+                    attribute_max_ = 1.0;
+                } else {
+
+                    Attribute<Numeric::uint8> filter;
+                    
+                    if(
+                        attribute_subelements_ == MESH_VERTICES &&
+                        vertices_filter_
+                    ) {
+                        filter.bind_if_is_defined(
+                            mesh_grob()->vertices.attributes(), "filter"
+                        );
+                    } else if(
+                        attribute_subelements_ == MESH_FACETS &&
+                        facets_filter_
+                    ) {
+                        filter.bind_if_is_defined(
+                            mesh_grob()->facets.attributes(), "filter"
+                        );
+                    } else if(
+                        attribute_subelements_ == MESH_CELLS &&
+                        cells_filter_
+                    ) {
+                        filter.bind_if_is_defined(
+                            mesh_grob()->cells.attributes(), "filter"
+                        );
+                    }
+                    
+                    attribute_min_ = Numeric::max_float64();
+                    attribute_max_ = Numeric::min_float64();
+                    for(index_t i: subelements) {
+                        if(filter.is_bound() && !filter[i]) {
+                            continue;
+                        }
+                        attribute_min_ = std::min(attribute_min_, attribute[i]);
+                        attribute_max_ = std::max(attribute_max_, attribute[i]);
+                    }
                 }
             } 
         }
@@ -261,7 +305,8 @@ namespace OGF {
     }
     
     void PlainMeshGrobShader::draw() {
-
+        MeshGrobShader::draw();
+        
 	if(glsl_program_changed_) {
 	    update_glsl_program();
 	}
@@ -334,7 +379,8 @@ namespace OGF {
 			for(index_t u=0; u<4; ++u) {
 			    for(index_t v=0; v<4; ++v) {
 				for(index_t w=0; w<4; ++w) {
-				    Memory::byte* p = image->pixel_base(u,v,w);
+				    Memory::byte* p =
+                                        image->pixel_base(u,v,w);
 				    index_t uu = (u + 1)%4;
 				    index_t vv = (v + 1)%4;
 				    index_t ww = (w + 1)%4;
@@ -351,7 +397,8 @@ namespace OGF {
 			    image, GL_NEAREST, GL_REPEAT
 			);
 		    } else {
-			std::string filename = "textures/checkerboard_gray.xpm";
+			std::string filename =
+                            "textures/checkerboard_gray.xpm";
 			if(FileManager::instance()->find_file(filename)) {
 			    texture_ = create_texture_from_file(
 				filename, GL_NEAREST, GL_REPEAT
@@ -371,7 +418,8 @@ namespace OGF {
             texture_->unbind();
 	} else if(get_attributes()) {
             index_t repeat = colormap_style_.repeat;
-            GLint filtering = colormap_style_.smooth ? GL_LINEAR : GL_NEAREST;
+            GLint filtering =
+                colormap_style_.smooth ? GL_LINEAR : GL_NEAREST;
             if(
                 String::string_starts_with(
                     colormap_style_.colormap_name,"iso"
@@ -488,6 +536,7 @@ namespace OGF {
                 float(border_style_.color.g()),
                 float(border_style_.color.b())                
             );
+            gfx_.set_mesh_border_width(border_style_.width);
             gfx_.draw_surface_borders();
         }
         
@@ -496,7 +545,7 @@ namespace OGF {
                 float(surface_style_.color.r()),
                 float(surface_style_.color.g()),
                 float(surface_style_.color.b()),
-                float(surface_style_.color.a())                		
+                float(surface_style_.color.a())
             );
             gfx_.set_mesh_color(
                 float(mesh_style_.color.r()),
@@ -807,13 +856,12 @@ namespace OGF {
         update();
     }
 
-
     void PlainMeshGrobShader::update_glsl_program() {
 	glsl_program_changed_ = true;
 	if(glupCurrentContext() == nullptr) {
 	    return;
 	}
-	glsl_start_time_ = SystemStopwatch::now();
+	glsl_start_time_ = Stopwatch::now();
 	glsl_frame_ = 0;
 	GEO_CHECK_GL();
 	if(glsl_program_ != 0) {
@@ -913,7 +961,7 @@ namespace OGF {
 	GLint iTime_loc = glGetUniformLocation(glsl_program_, "iTime");
 	if(iTime_loc != -1) {
 	    glUniform1f(
-		iTime_loc, float(SystemStopwatch::now() - glsl_start_time_)
+		iTime_loc, float(Stopwatch::now() - glsl_start_time_)
 	    );
 	    update();
 	}
@@ -972,6 +1020,176 @@ namespace OGF {
 	glupDisable(GLUP_TEXTURING);
 	GEO_CHECK_GL();	
     }
-    
+
+    /*************************************************************************/
+
+    ExplodedViewMeshGrobShader::ExplodedViewMeshGrobShader(
+        MeshGrob* grob
+    ) : PlainMeshGrobShader(grob) {
+        amount_ = 0;
+        dirty_ = false;
+        set_vertices_filter(true);
+        set_facets_filter(true);
+        set_cells_filter(true);
+    }
+
+    ExplodedViewMeshGrobShader::~ExplodedViewMeshGrobShader() {
+    }
+
+    void ExplodedViewMeshGrobShader::draw() {
+        if(mesh_grob()->graphics_are_locked()) {
+            return;
+        }
+
+
+        // Determine whether region is on vertices, facets or cells,
+        // and create a ReadOnlyScalarAttributeAdapter to access it
+        // whatever its internal type
+        
+        std::string rgn_subelements_name;
+        std::string rgn_attribute_name;
+        String::split_string(
+            region_, '.',
+            rgn_subelements_name,
+            rgn_attribute_name
+        );
+
+        // Not a good idea, we are using this one internally !
+        if(rgn_attribute_name == "filter") {
+            PlainMeshGrobShader::draw();
+            return;
+        }
+        
+        MeshElementsFlags rgn_attribute_subelements =
+            mesh_grob()->name_to_subelements_type(rgn_subelements_name);
+        const MeshSubElementsStore& rgn_subelements =
+            mesh_grob()->get_subelements_by_type(rgn_attribute_subelements);
+        ReadOnlyScalarAttributeAdapter rgn_attribute (
+            rgn_subelements.attributes(), rgn_attribute_name
+        );
+
+        if(!rgn_attribute.is_bound()) {
+            PlainMeshGrobShader::draw();
+            return;
+        }
+
+        // Accept only integer types
+        if(
+            rgn_attribute.element_type() !=
+            ReadOnlyScalarAttributeAdapter::ET_INT32 &&
+            rgn_attribute.element_type() !=
+            ReadOnlyScalarAttributeAdapter::ET_UINT32 &&
+            rgn_attribute.element_type() !=
+            ReadOnlyScalarAttributeAdapter::ET_UINT8 &&
+            rgn_attribute.element_type() !=
+            ReadOnlyScalarAttributeAdapter::ET_INT8 
+        ) {
+            PlainMeshGrobShader::draw();
+            return;
+        }
+        
+        // Compute object barycenter and regions barycenter
+        if(dirty_ || mesh_grob()->dirty()) {
+            rgn_min_ = 100000;
+            rgn_max_ = -100000;
+            for(index_t elt: rgn_subelements) {
+                rgn_min_ = std::min(rgn_min_, int(rgn_attribute[elt]));
+                rgn_max_ = std::max(rgn_max_, int(rgn_attribute[elt]));
+            }
+            region_bary_.assign(
+                index_t(rgn_max_ - rgn_min_ + 1),vec3(0.0, 0.0, 0.0)
+            );
+            vector<index_t> region_count(index_t(rgn_max_ - rgn_min_ + 1), 0);
+            
+            switch(rgn_attribute_subelements) {
+            case MESH_VERTICES: {
+                for(index_t v: mesh_grob()->vertices) {
+                    int rgn = int(rgn_attribute[v]) - rgn_min_;
+                    region_bary_[rgn] +=
+                        vec3(mesh_grob()->vertices.point_ptr(v));
+                    region_count[rgn]++;
+                }
+            } break;
+            case MESH_FACETS: {
+                for(index_t f: mesh_grob()->facets) {
+                    int rgn = int(rgn_attribute[f]) - rgn_min_;
+                    for(index_t lv=0;
+                        lv< mesh_grob()->facets.nb_vertices(f); ++lv
+                    ) {
+                        index_t v = mesh_grob()->facets.vertex(f,lv);
+                        region_bary_[rgn] +=
+                            vec3(mesh_grob()->vertices.point_ptr(v));
+                        region_count[rgn]++;
+                    }
+                }
+            } break;
+            case MESH_CELLS: {
+                for(index_t c: mesh_grob()->facets) {
+                    int rgn = int(rgn_attribute[c]) - rgn_min_;
+                    for(index_t lv=0;
+                        lv< mesh_grob()->cells.nb_vertices(c); ++lv
+                    ) {
+                        index_t v = mesh_grob()->cells.vertex(c,lv);
+                        region_bary_[rgn] +=
+                            vec3(mesh_grob()->vertices.point_ptr(v));
+                        region_count[rgn]++;
+                    }
+                }
+            } break;
+            default:
+              break;
+            }
+            bary_ = vec3(0.0, 0.0, 0.0);
+            double bary_cnt = 0.0;
+            for(index_t rgn=0; rgn<region_bary_.size(); ++rgn) {
+                region_bary_[rgn] =
+                    1.0/double(region_count[rgn])*region_bary_[rgn];
+                if(
+                    Numeric::is_nan(region_bary_[rgn].x) ||
+                    Numeric::is_nan(region_bary_[rgn].y) ||
+                    Numeric::is_nan(region_bary_[rgn].z) 
+                ) {
+                    region_bary_[rgn] = vec3(0.0, 0.0, 0.0);
+                } else {
+                    bary_ = bary_ + region_bary_[rgn];
+                    bary_cnt += 1.0;
+                }
+            }
+            bary_ = (1.0/bary_cnt)*bary_;
+            dirty_ = false;
+        }
+
+        Attribute<Numeric::uint8> filter(rgn_subelements.attributes(),"filter");
+
+        // Draw the object as many times as the number of regions
+        // (not efficient at all, but for a small number of regions it is OK)
+        for(index_t rgn=0; rgn<region_bary_.size(); ++rgn) {
+
+            // For each region, generate a filter that only displays the region
+            for(index_t elt: rgn_subelements) {
+                filter[elt] = (int(rgn_attribute[elt]) == (int(rgn)+rgn_min_));
+            }
+            MeshGrobFiltersCommands::propagate_filter(
+                mesh_grob(),rgn_attribute_subelements
+            );
+
+            // This will mark the filters as dirty, and force
+            // sending data to the VBOs when using hardware
+            // filtering.
+            gfx_.set_filter(MESH_VERTICES,"filter");
+            gfx_.set_filter(MESH_FACETS,"filter");
+            gfx_.set_filter(MESH_CELLS,"filter");                        
+            
+            vec3 T = double(amount_)/10.0 * (region_bary_[rgn] - bary_);
+            glupMatrixMode(GLUP_MODELVIEW_MATRIX);
+            glupPushMatrix();
+            glupTranslated(T.x, T.y, T.z);
+            PlainMeshGrobShader::draw();
+            glupPopMatrix();
+        }
+    }
+
+    /*************************************************************************/
+
 }
 

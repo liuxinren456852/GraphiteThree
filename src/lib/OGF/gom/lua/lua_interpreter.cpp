@@ -66,6 +66,7 @@ namespace OGF {
 
     LuaCallable::LuaCallable(lua_State* L, int target_index) {
 	lua_state_ = L;
+
 	// Since we change the stack, we need to convert index relative
 	// to top into absolute index.
 	if(target_index < 0) {
@@ -79,19 +80,22 @@ namespace OGF {
 	lua_pushnil(lua_state_);
 	lua_copy(lua_state_, target_index, -1);
 	lua_seti(lua_state_, -2, lua_Integer(instance_id_));
+        lua_pop(lua_state_, 1); // Leave the Lua stack as we found it
+
+        // Keep a ref to the Lua interpreter so that the Lua interpreter
+        // is not destroyed before the last LuaCallable closes the door.
+        interpreter_ = Interpreter::instance_by_language("Lua");
     }
 
 
     static bool args_are_for_name_value_call(const ArgList& args) {
+        if(args.nb_args() == 0) {
+            return false;
+        }
 	if(args.nb_args() == 1 && args.ith_arg_name(0) == "value") {
 	    return false;
 	}
-	for(index_t i=0; i<args.nb_args(); ++i) {
-	    if(args.ith_arg_name(i) != "arg#" + String::to_string(i)) {
-		return true;
-	    }
-	}
-	return false;
+        return !args.has_unnamed_args();
     }
     
     bool LuaCallable::invoke(const ArgList& args, Any& ret_val) {
@@ -112,7 +116,7 @@ namespace OGF {
 	    result = (lua_pcall(lua_state_, 1, 1, 0) == 0);		
 	} else {
 	    for(index_t i=0; i<args.nb_args(); ++i) {
-		lua_pushgraphiteval(lua_state_, args.ith_arg_value(i));		
+		lua_pushgraphiteval(lua_state_, args.ith_arg_value(i));
 	    }
 	    result = (
 		lua_pcall(lua_state_, int(args.nb_args()), 1, 0) == 0
@@ -385,7 +389,7 @@ namespace {
 	    for(index_t i=0; index + int(i) <= lua_gettop(L); ++i) {
 		lua_tographiteval(
 		    L, index + int(i),
-		    args.create_arg("arg#"+String::to_string(i))
+		    args.create_unnamed_arg()
 		);
 	    }
 	}
@@ -803,7 +807,7 @@ namespace {
 	    lua_newtable(L);
 	    lua_setfield(L, LUA_REGISTRYINDEX, "graphite_lua_targets");
 	}
-	
+
 	// Last argument set to false: do not manage ref count, else
 	// this would generate a circular reference.
 	lua_pushgraphite(L, interpreter, false);

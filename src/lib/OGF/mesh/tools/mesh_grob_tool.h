@@ -151,10 +151,21 @@ namespace OGF {
          *  MESH_CELLS). It is also possible to use a bitwise-or combination
          *  of them (but then it is no longer possible to know what element
          *  type was picked).
+         * \param[in] image a pointer to an optional image to get the picking 
+         *  framebuffer (can be used by selection tools). The image is supposed
+         *  to be uninitialized. The function allocates it to the correct size
+         *  and reads the pixels from the picking buffer.
+         * \param[in] x0 , y0 , width , height optional image bounds. If let
+         *  unspecified, the entire picking buffer is copied.
          * \return the index of the picked element or index_t(-1) if nothing
          *  was picked.
          */
-        index_t pick(const RayPick& rp, MeshElementsFlags what);
+        index_t pick(
+            const RayPick& rp, MeshElementsFlags what,
+            Image* image=nullptr,
+            index_t x0=0, index_t y0=0,
+            index_t width=0, index_t height=0
+        );
 
         /**
          * \brief Gets the 3D coordinate of a point dragged from the latest
@@ -192,6 +203,7 @@ namespace OGF {
         double picked_depth() const {
             return picked_depth_;
         }
+
         
     protected:
         vec3 picked_point_;
@@ -295,6 +307,32 @@ namespace OGF {
     };
 
     /**
+     * \brief Applies a mouse-controlled scaling to a subset.
+     */
+    class MeshGrobScrollResizeSubset : public MeshGrobTransformSubset {
+    public:
+
+        /**
+         * \brief MeshGrobResizeSubset constructor.
+         * \param[in] parent a pointer to the MeshGrobTransformTool (MultiTool)
+         *  this MeshGrobResizeSubset belongs to.
+         * \param[in] step 1 for enlarge, -1 for shrink
+         */
+        MeshGrobScrollResizeSubset(
+            MeshGrobTransformTool* parent, int step
+        ) : MeshGrobTransformSubset(parent), step_(step) {
+        }
+
+        /**
+         * \copydoc Tool::grab()
+         */
+        void grab(const RayPick& p_ndc) override;
+
+    private:
+        int step_;
+    };
+
+    /**
      * \brief Applies a mouse-controlled rotation to a subset.
      */
     class MeshGrobRotateSubset : public MeshGrobTransformSubset {
@@ -339,9 +377,17 @@ namespace OGF {
     gom_class MeshGrobTransformTool : public MultiTool {
     public:
         MeshGrobTransformTool(ToolsManager* parent) : MultiTool(parent) {
-            set_tool(1, new MeshGrobMoveSubset(this));
-            set_tool(2, new MeshGrobResizeSubset(this));
-            set_tool(3, new MeshGrobRotateSubset(this));
+            set_tool(MOUSE_BUTTON_LEFT, new MeshGrobMoveSubset(this));
+            set_tool(MOUSE_BUTTON_MIDDLE, new MeshGrobResizeSubset(this));
+            set_tool(MOUSE_BUTTON_RIGHT, new MeshGrobRotateSubset(this));
+            set_tool(
+                MOUSE_BUTTON_WHEEL_UP,
+                new MeshGrobScrollResizeSubset(this, -1)
+            );
+            set_tool(
+                MOUSE_BUTTON_WHEEL_DOWN,
+                new MeshGrobScrollResizeSubset(this,  1)
+            );
             prev_inverse_transform_.load_identity();
         }
 

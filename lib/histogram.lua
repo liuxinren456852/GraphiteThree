@@ -37,8 +37,8 @@ end
 
 function Stats.update_histo()
    if not Stats.visible then
-       Stats.dirty = true
-       return
+      Stats.dirty = true
+      return
    end
    if Stats.attrib == nil then
       Stats.reset()
@@ -81,6 +81,7 @@ function Stats.update_histo()
 end    
 
 function Stats.update()
+
    local changed = false
    local object = scene_graph.current()
    
@@ -122,7 +123,7 @@ function Stats.update()
       changed = true
    end      
 
-   Stats.attrib   = object.I.Editor.find_attribute(container_attrib_name)
+   Stats.attrib = object.I.Editor.find_attribute(container_attrib_name)
 
    local f = shd.colormap:split(';')
    local colormap_name = f()
@@ -226,13 +227,14 @@ function Stats.selection_handler()
 	 Stats.dragging = true
       end
       if hovering_histo then
-         imgui.BeginTooltip()
-         imgui.Text(
-	     string.format('value: %0.3f',Stats.index_to_val(mi)) ..
-	     '\nnb samples: ' ..
-	     tostring(Stats.histo[mi])
-	 )
-         imgui.EndTooltip()      
+         if imgui.BeginTooltip() then
+            imgui.Text(
+	       string.format('value: %0.3f',Stats.index_to_val(mi)) ..
+	       '\nnb samples: ' ..
+	       tostring(Stats.histo[mi])
+	    )
+            imgui.EndTooltip()
+         end
       end
    end
    if Stats.sel1 ~= Stats.sel2 then

@@ -73,16 +73,22 @@ namespace OGF {
          * \brief Fills a closed surface mesh with tetrahedra, using tetgen.
          * \param[in] preprocess Tentatively fix degeneracies 
          *  in the input mesh
+         * \param[in] epsilon if preprocess is set, tolerance for merging
+         *  vertices, in percent of bbox diagonal
+         * \param[in] max_hole_area if preprocess is set, tolerance for filling
+         *  holes, in percent of total surface area
          * \param[in] refine Create additional vertices to improve quality.
          * \param[in] quality 1.0 for high quality, 5.0 for low quality.
          * \param[in] verbose enables tetgen statistics and messages.
          */
         void tet_meshing(
-            bool preprocess=true,
-            bool refine=true,
+            bool preprocess=false,
+            double epsilon=0.001,
+            double max_hole_area=0.01,
+            bool refine=false,
             double quality=1.0,
-            bool verbose=false,
-	    bool keep_regions=false
+	    bool keep_regions=false,
+            bool verbose=false
         );
 
        /*********************************************************************/
@@ -138,10 +144,10 @@ namespace OGF {
 	 *  Voronoi diagram
 	 * \param[in] exact if true, all intersection perdicates are 
 	 *  evaluated with exact arithmetics and symbolic perturbations
-	 * \param[in] generate_ids if true, generate ids in attributes. Necessary
-	 *  to output OVM files.
-	 * \param[in] medial_axis if true, generate an approximation of the medial
-	 *  axis (by removing facets from the computed mesh).
+	 * \param[in] generate_ids if true, generate ids in attributes. 
+	 *  Necessary to output OVM files.
+	 * \param[in] medial_axis if true, generate an approximation of 
+	 *  the medial axis (by removing facets from the computed mesh).
 	 */
 	void Voronoi_meshing(
 	    const NewMeshGrobName& voronoi = "voronoi",
@@ -232,6 +238,14 @@ namespace OGF {
 	 * \brief Displays the volume of a mesh.
 	 */
 	void display_volume();
+
+        /*********************************************************************/
+
+	/**
+	 * \brief Copies the border of the volume into the surfacic part
+	 *  of the mesh.
+	 */
+	void compute_borders();
     };
     
 }

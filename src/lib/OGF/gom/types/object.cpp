@@ -130,11 +130,29 @@ namespace OGF {
         return ogf_is_a(*this, type);
     }
 
+    bool Object::has_method(const std::string& method_name) const {
+	return meta_class()->find_method(method_name) != nullptr;	
+    }
+    
     bool Object::invoke_method(
         const std::string& method_name,
         const ArgList& args, Any& ret_val
     ) {
 
+	/*
+	std::cerr << meta_class_->name() << "::" << method_name << "(";
+	for(index_t i=0; i<args.nb_args(); ++i) {
+	    std::cerr << args.ith_arg_name(i) << "=";
+	    std::string arg_value;
+	    args.ith_arg_value(i).get_value(arg_value);
+	    std::cerr << arg_value;
+	    if(i != args.nb_args()-1) {
+		std::cerr << ";";
+	    }
+	}
+	std::cerr << ")" << std::endl;
+	*/
+	
         if( !slots_enabled_ && 
             method_name != "enable_slots" &&
             method_name != "slots_enabled"
@@ -168,6 +186,10 @@ namespace OGF {
         return false;
     }
 
+    void Object::help() const {
+        Logger::out("GOM") << get_doc() << std::endl;
+    }
+    
     bool Object::set_property(
         const std::string& prop_name, const Any& prop_value
     ) {
@@ -184,6 +206,10 @@ namespace OGF {
         return false;
     }
 
+    bool Object::has_property(const std::string& prop_name) const {
+	return (meta_class()->find_property(prop_name) != nullptr);
+    }
+    
     bool Object::get_property(
         const std::string& prop_name, Any& prop_value
     ) const {
@@ -259,6 +285,10 @@ namespace OGF {
         }
 
         bool result = true;
+
+        if(connections_ == nullptr) {
+            return false;
+        }
         
         auto it = connections_->find(signal_name);
         if(it == connections_->end()) {
@@ -288,6 +318,17 @@ namespace OGF {
 			   << " not implemented"
 			   << std::endl;
     }
+
+    std::string Object::get_doc() const {
+        return meta_class()->get_doc();
+    }
+
+
+    void Object::search(const std::string& needle, const std::string& path) {
+        geo_argused(needle);
+        geo_argused(path);
+    }
+    
     
 /******************************************************************/
     

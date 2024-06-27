@@ -38,6 +38,7 @@
 #define H_OGF_SCENE_GRAPH_TYPES_TOOL_H
 
 #include <OGF/scene_graph/common/common.h>
+#include <OGF/skin/types/events.h>
 #include <OGF/skin/transforms/ray_picker.h>
 #include <OGF/gom/types/node.h>
 #include <OGF/basic/math/geometry.h>
@@ -59,7 +60,7 @@ namespace OGF {
     gom_attribute(abstract, "true") 
     gom_class SCENE_GRAPH_API Tool : public Node {
     public:
-
+        
         /**
          * \brief Tool constructor.
          * \param[in] mgr a pointer to the ToolsManager
@@ -146,6 +147,39 @@ namespace OGF {
          */
         Grob* object() const ;
 
+        /**
+         * \brief Computes screen-coordinates of a 3D point.
+         * \param[in] p the world-space coordinates of the 
+         *  point to be projected.
+         * \details Can be used for highlighting elements on
+         *  the overlay. The 3D transform is the latest one used
+         *  by the shader that displayed the Grob.
+         */
+        vec2 project_point(vec3 p) const;
+
+
+        /**
+         * \brief Converts normalized device coordinates to 
+         *  device coordinates.
+         * \details used for instance to send a picked point 
+         *  (in normalized device coordinate) to the overlay
+         *  (that uses device coordinates).
+         */
+        vec2 ndc_to_dc(vec2 p) const;
+        
+    protected:
+        /**
+         * \brief Sets the tooltip to be displayed under the mouse.
+         * \details For multi-line text, use '\\n' (with two backslashes).
+         * \param[in] text the text to be displayed.
+         */
+        void set_tooltip(const std::string& text);
+
+        /**
+         * \brief Removes a tooltip previously created by set_tooltip()
+         */
+        void reset_tooltip();
+        
     protected:
         ToolsManager* tools_manager_ ;
     } ;
@@ -158,13 +192,12 @@ namespace OGF {
     //___________________________________________________________________
 
     /**
-     * \brief A Tool that can associate up to three different
-     *  tools to the three buttons of the mouse.
+     * \brief A Tool that can associate a
+     *  different tool to each button of the mouse.
      */
     gom_attribute(abstract, "true") 
     gom_class SCENE_GRAPH_API MultiTool : public Tool {
     public:
-
         /**
          * \brief MultiTool constructor.
          * \param[in] mgr a pointer to the ToolsManager
@@ -201,7 +234,7 @@ namespace OGF {
     protected:
         /**
          * \brief Associates a tool to one of the buttons.
-         * \param[in] button one of (1,2,3)
+         * \param[in] button in 1..MAX_NB_TOOLS
          * \param[in] tool a pointer to the Tool. Ownership is
          *  transfered to this MultiTool.
          */
@@ -209,14 +242,14 @@ namespace OGF {
 
         /**
          * \brief Gets a Tool by button id.
-         * \param[in] button one of (1,2,3)
+         * \param[in] button in 1..MAX_NB_TOOLS
          * \return a pointer to the Tool associated with button \p button
          *  or nil if there is no such Tool.
          */
         Tool* get_tool(int button) const ;
       
     protected:
-        Tool_var tools_[3] ;
+        Tool_var tools_[MOUSE_BUTTONS_NB];
     } ; 
 
     //_________________________________________________________________

@@ -48,8 +48,9 @@
 #include <OGF/mesh/commands/mesh_grob_shapes_commands.h>
 #include <OGF/mesh/commands/mesh_grob_volume_commands.h>
 #include <OGF/mesh/commands/mesh_grob_mesh_commands.h>
-#include <OGF/mesh/commands/mesh_grob_selection_commands.h>
 #include <OGF/mesh/commands/mesh_grob_attributes_commands.h>
+#include <OGF/mesh/commands/mesh_grob_selections_commands.h>
+#include <OGF/mesh/commands/mesh_grob_filters_commands.h>
 #include <OGF/mesh/commands/mesh_grob_spectral_commands.h>
 
 #include <OGF/mesh/interfaces/mesh_grob_editor_interface.h>
@@ -59,14 +60,24 @@
 #include <OGF/mesh/tools/mesh_grob_border_tools.h>
 #include <OGF/mesh/tools/mesh_grob_selection_tools.h>
 #include <OGF/mesh/tools/mesh_grob_edge_tools.h>
+#include <OGF/mesh/tools/mesh_grob_paint_tools.h>
 
 #include <geogram/basic/command_line.h>
 #include <geogram/basic/command_line_args.h>
+
+#ifdef GEOGRAM_WITH_VORPALINE
+#include <vorpalib/basic/common.h>
+#endif
 
 // [includes insertion point] (do not delete this line)
 
 namespace OGF {
     void mesh_libinit::initialize() {
+        
+#ifdef GEOGRAM_WITH_VORPALINE
+        GEO::vorpaline_initialize();
+#endif        
+        
         Logger::out("Init") << "<mesh>" << std::endl; 
         //_____________________________________________________________
         gom_package_initialize(mesh) ;
@@ -74,16 +85,18 @@ namespace OGF {
         ogf_register_grob_type<MeshGrob>();
         
         ogf_register_grob_shader<MeshGrob,PlainMeshGrobShader>();
+        ogf_register_grob_shader<MeshGrob,ExplodedViewMeshGrobShader>();        
+        ogf_register_grob_shader<MeshGrob,ParamMeshGrobShader>();
         ogf_register_grob_shader<MeshGrob,PDBMeshGrobShader>();
-        ogf_register_grob_shader<MeshGrob,ParamMeshGrobShader>();		
         
         ogf_register_grob_commands<MeshGrob,MeshGrobPointsCommands>();
         ogf_register_grob_commands<MeshGrob,MeshGrobSurfaceCommands>(); 
         ogf_register_grob_commands<MeshGrob,MeshGrobShapesCommands>();       
         ogf_register_grob_commands<MeshGrob,MeshGrobVolumeCommands>();
         ogf_register_grob_commands<MeshGrob,MeshGrobMeshCommands>();
-        ogf_register_grob_commands<MeshGrob,MeshGrobSelectionCommands>();
         ogf_register_grob_commands<MeshGrob,MeshGrobAttributesCommands>();
+        ogf_register_grob_commands<MeshGrob,MeshGrobSelectionsCommands>();
+        ogf_register_grob_commands<MeshGrob,MeshGrobFiltersCommands>();  
         ogf_register_grob_commands<MeshGrob,MeshGrobSpectralCommands>();	
 
         ogf_register_grob_interface<MeshGrob,MeshGrobEditor>();	
@@ -106,7 +119,14 @@ namespace OGF {
         ogf_register_grob_tool<MeshGrob,MeshGrobSelectUnselectVertex>();
 
         ogf_register_grob_tool<MeshGrob,MeshGrobCreateEdge>();	
-	
+
+        ogf_register_grob_tool<MeshGrob,MeshGrobPaint>();
+        ogf_register_grob_tool<MeshGrob,MeshGrobPaintRect>();
+        ogf_register_grob_tool<MeshGrob,MeshGrobPaintFreeform>();
+        ogf_register_grob_tool<MeshGrob,MeshGrobPaintConnected>();        
+        ogf_register_grob_tool<MeshGrob,MeshGrobProbe>();
+        ogf_register_grob_tool<MeshGrob,MeshGrobRuler>();
+       
         // [source insertion point] (do not delete this line)
         // Insert package initialization stuff here ...
         //_____________________________________________________________

@@ -78,7 +78,9 @@ namespace OGF {
          * \pre i < nb_custom_attributes()
          */
         std::string ith_custom_attribute_name(index_t i) const {
-            return custom_attributes_.ith_arg_name(i);
+            return (i < nb_custom_attributes())
+                ? custom_attributes_.ith_arg_name(i)
+                : std::string();
         }
 
         /**
@@ -88,7 +90,9 @@ namespace OGF {
          * \pre i < nb_custom_attributes()
          */
         std::string ith_custom_attribute_value(index_t i) const {
-            return custom_attributes_.ith_arg_value(i).as_string();
+            return (i < nb_custom_attributes())
+                ? custom_attributes_.ith_arg_value(i).as_string()
+                : std::string();
         }
         
         /**
@@ -132,8 +136,9 @@ namespace OGF {
          * \pre has_custom_attribute(name)
          */
         std::string custom_attribute_value(const std::string& name) const {
-	    geo_debug_assert(has_custom_attribute(name));
-            return custom_attributes_.get_arg(name) ;
+            return
+                has_custom_attribute(name) ?
+                custom_attributes_.get_arg(name) : std::string();
         }
 
 	/**
@@ -157,7 +162,13 @@ namespace OGF {
         MetaInformation() {
         }
         virtual ~MetaInformation() ;
-	
+
+
+        /**
+         * \copydoc Object::search()
+         */
+        virtual void search(const std::string& needle, const std::string& path = "");
+        
     gom_slots:
 
 	/**
@@ -184,7 +195,21 @@ namespace OGF {
 	 * \copydoc CustomAttributes::custom_attribute_value()
 	 */
 	std::string custom_attribute_value(const std::string& name) const;
-	
+
+	/**
+	 * \copydoc CustomAttributes::create_custom_attribute()
+	 */
+        void create_custom_attribute(
+            const std::string& name, const std::string& value
+        );
+
+	/**
+	 * \copydoc CustomAttributes::set_custom_attribute()
+	 */
+        void set_custom_attribute(
+            const std::string& name, const std::string& value
+        );
+
     } ;
 
     /**

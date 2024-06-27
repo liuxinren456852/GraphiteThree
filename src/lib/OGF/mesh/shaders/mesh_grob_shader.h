@@ -60,7 +60,7 @@ namespace GEO {
 
 namespace OGF {
 
-    //________________________________________________________
+    /**********************************************************/
     
     class Builder;
     class Texture;
@@ -150,7 +150,7 @@ namespace OGF {
          * \brief Makes surface borders invisible and triggers a drawing event.
          */
         virtual void hide_borders();
-        
+
     gom_properties:
 
         /**
@@ -260,7 +260,7 @@ namespace OGF {
         }
     };
 
-    //________________________________________________________
+    /****************************************************************/
 
     /**
      * \brief The default implementation of MeshGrobShader
@@ -337,7 +337,7 @@ namespace OGF {
          * \copydoc MeshGrobShader::hide_borders()
          */
 	 void hide_borders() override;
-        
+
     gom_properties:
 
         /**
@@ -442,7 +442,7 @@ namespace OGF {
          */
         gom_attribute(visible_if, "attributes")
 	gom_attribute(handler, "combo_box")
-	gom_attribute(values, "scalar_attributes")
+	gom_attribute(values, "$scalar_attributes")
         void set_attribute(const std::string& value);
 
         /**
@@ -514,7 +514,7 @@ namespace OGF {
          */
         gom_attribute(visible_if, "texturing")
 	gom_attribute(handler, "combo_box")
-	gom_attribute(values, "vector_attributes")
+	gom_attribute(values, "$vector_attributes")
         void set_tex_coords(const std::string& value);
 
         /**
@@ -532,7 +532,7 @@ namespace OGF {
          */
         gom_attribute(visible_if, "coloring")
 	gom_attribute(handler, "combo_box")
-	gom_attribute(values, "vector_attributes")
+	gom_attribute(values, "$vector_attributes")
 	void set_colors(const std::string& value) {
 	    // It is an alias of tex_coord, because we use
 	    // 3D texturing internally to display colors
@@ -654,6 +654,23 @@ namespace OGF {
         }
 
         /**
+         * \brief Sets facet filtering
+         * \param[in] value true if facet filtering is activated
+         */
+        gom_attribute(visible_if, "has_facets")
+        void set_facets_filter(bool value) { 
+            facets_filter_ = value;
+            gfx_.set_filter(
+                MESH_FACETS, value ? "filter" : ""
+            );
+            update(); 
+        }
+
+        bool get_facets_filter() const {
+            return facets_filter_;
+        }
+        
+        /**
          * \brief Sets culling mode;
          * \param[in] value one of NO_CULL, CULL_FRONT, CULL_BACK
          */
@@ -736,6 +753,25 @@ namespace OGF {
         const SurfaceStyle& get_volume_style() const {
             return volume_style_;
         }
+
+
+        /**
+         * \brief Sets cells filtering
+         * \param[in] value true if facet filtering is activated
+         */
+        gom_attribute(visible_if, "has_cells")
+        void set_cells_filter(bool value) {
+            gfx_.set_filter(
+                MESH_CELLS, value ? "filter" : ""
+            );
+            cells_filter_ = value;
+            update(); 
+        }
+
+        bool get_cells_filter() const {
+            return cells_filter_;
+        }
+
         
         /**
          * \brief Sets whether volumetric cells should be colored
@@ -949,6 +985,23 @@ namespace OGF {
             return vertices_style_;
         }
 
+
+        /**
+         * \brief Sets vertices filtering
+         * \param[in] value true if vertices filtering is activated
+         */
+        void set_vertices_filter(bool value) {
+            gfx_.set_filter(
+                MESH_VERTICES, value ? "filter" : ""
+            );
+            vertices_filter_ = value;
+            update(); 
+        }
+
+        bool get_vertices_filter() const {
+            return vertices_filter_;
+        }
+        
 	/**
 	 * \brief Sets the transparency of the vertices 
 	 *  (use with dark background).
@@ -1126,11 +1179,13 @@ namespace OGF {
 	ImageFileName     texture_filename_;
 	
         SurfaceStyle surface_style_;
+        bool         facets_filter_;
 	CullingMode  culling_mode_;
 	
 	index_t      specular_;
         bool         two_sided_;
         SurfaceStyle volume_style_;
+        bool         cells_filter_;
         bool         colored_cells_;
         bool         tets_;
         bool         hexes_;
@@ -1142,6 +1197,7 @@ namespace OGF {
         EdgeStyle    mesh_style_;
         EdgeStyle    border_style_;
         PointStyle   vertices_style_;
+        bool         vertices_filter_;
 	double       vertices_transparency_;
         PointStyle   vertices_selection_style_;
         bool         animate_;
@@ -1158,7 +1214,63 @@ namespace OGF {
 	GLuint       glsl_program_;
     };
 
-    //________________________________________________________    
+    /**********************************************************/
+
+    /**
+     * \brief Exploded view, moves regions apart.
+     */
+    gom_class MESH_API ExplodedViewMeshGrobShader : public PlainMeshGrobShader {
+    public:
+        /**
+         * \brief PlainMeshGrobShader constructor.
+         * \param[in] grob a pointer to the MeshGrob this shader is attached to
+         */
+         ExplodedViewMeshGrobShader(MeshGrob* grob);
+
+        /**
+         * \brief PlainMeshGrobShader destructor.
+         */
+         ~ExplodedViewMeshGrobShader() override;
+
+    gom_properties:
+
+         gom_attribute(handler, "combo_box")
+         gom_attribute(values, "$scalar_attributes")
+         void set_region(const std::string& value) {
+             region_ = value;
+             dirty_ = true;
+             update();
+         }
+
+         const std::string& get_region() const {
+             return region_;
+         }
+         
+         void set_amount(index_t value) {
+             amount_ = value;
+             update();
+         }
+
+         index_t get_amount() const {
+             return amount_;
+         }
+         
+    public:
+         void draw() override;
+
+    protected:
+         bool dirty_;
+         std::string region_;         
+         index_t amount_;
+         int rgn_min_;
+         int rgn_max_;
+         vec3 bary_;
+         vector<vec3> region_bary_;
+    };
+
+    /**********************************************************/
+         
 }
+
 #endif
 
